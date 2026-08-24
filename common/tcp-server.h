@@ -44,12 +44,15 @@ namespace Common {
     TCPServer& operator=(const TCPServer&&) = delete; // Move Assignment;
 
     auto listen(const std::string &iface, int port) -> void;
+    auto del(TCPSocket* socket) -> void;
 
     auto destroy() noexcept -> void;
     ~TCPServer();
     
+    auto poll() noexcept -> void;
+    auto TCPServer::sendAndRecv() noexcept -> void;
     private: 
         auto epoll_add(TCPSocket *socket) -> bool;
-        auto epoll_del(TCPSocket *socket) -> void;
+        auto epoll_del(TCPSocket *socket) -> bool;
   };
 }
