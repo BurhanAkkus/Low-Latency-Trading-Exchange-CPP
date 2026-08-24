@@ -25,7 +25,7 @@ namespace Common {
     }
     // Allocates buffers from heap.
     // Can't dynamically create TCPSockets.
-    // Only compile-time creation!!
+    // Only compile-time creation or Allocate to MemoryPool.
     explicit TCPSocket(Logger &logger)
         : logger_(logger) {
       send_buffer_ = new char[TCPBufferSize];
