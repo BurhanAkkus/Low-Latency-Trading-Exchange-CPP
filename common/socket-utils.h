@@ -15,17 +15,9 @@
 #include <fcntl.h>
 #include "macros.h"
 #include "logging.h"
+#include "time-utils.h"
 namespace Common {
   constexpr int MaxTCPServerBacklog = 1024;
-  auto getIfaceIP(const std::string &iface) -> std::string;
-  auto setNonBlocking(int fd) -> bool;
-  auto setNoDelay(int fd) -> bool;
-  auto setSOTimestamp(int fd) -> bool;
-  auto wouldBlock() -> bool;
-  auto setMcastTTL(int fd, int ttl) -> bool;
-  auto setTTL(int fd, int ttl) -> bool;
-  auto join(int fd, const std::string &ip, const
-    std::string &iface, int port) -> bool;
   auto createSocket(Logger &logger, const std::string
     &t_ip, const std::string &iface, int port, bool is_udp,
        bool is_blocking, bool is_listening, int ttl, bool
@@ -50,7 +42,7 @@ namespace Common {
     return buf;
   }
 
-  //  sets the FD to be nonBlocking.
+  // sets the FD to be nonBlocking.
   // After each read, we need to check if the results is 
   // EWouldBlock or EAgain.
   auto setNonBlocking(int fd) -> bool {
@@ -94,78 +86,79 @@ namespace Common {
       reinterpret_cast<void *>(&one), sizeof(one)) != -1);
   }
 
-    auto createSocket(Logger &logger, const std::string&t_ip,
-       const std::string &iface, int port,
-      bool is_udp, bool is_blocking, bool
-      is_listening, int ttl, bool
-      needs_so_timestamp) -> int {
-      std::string time_str;
-      const auto ip = t_ip.empty() ? getIfaceIP(iface) :
-        t_ip;
-      logger.log("%:% %() % ip:% iface:% port:% is_udp:% is_blocking:% is_listening:% ttl:% SO_time:%\n",
-          __FILE__, __LINE__, __FUNCTION__,
-                Common::getCurrentTimeStr(&time_str), ip,
-                  iface, port, is_udp, is_blocking,
-                    is_listening, ttl, needs_so_timestamp);
-      addrinfo hints{};
-      hints.ai_family = AF_INET; // IPv4 only.
-      hints.ai_socktype = is_udp ? SOCK_DGRAM : SOCK_STREAM;
-      hints.ai_protocol = is_udp ? IPPROTO_UDP : IPPROTO_TCP;
-      hints.ai_flags = is_listening ? AI_PASSIVE : 0;
-      if (std::isdigit(ip.c_str()[0])){hints.ai_flags |= AI_NUMERICHOST;}// Skip DNS if IP is already resolved.
-      hints.ai_flags |= AI_NUMERICSERV;// Port is numeric. Skip service name lookup.
-      addrinfo *result = nullptr;
-      const auto rc = getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &result);
-      if (rc) {
-        logger.log("getaddrinfo() failed. error:% errno:%\n",gai_strerror(rc), strerror(errno));
+  auto createSocket(Logger &logger, const std::string&t_ip,
+    const std::string &iface, int port,
+    bool is_udp, bool is_blocking, bool
+    is_listening, int ttl, bool
+    needs_so_timestamp) -> int {
+    std::string time_str;
+    const auto ip = t_ip.empty() ? getIfaceIP(iface) : t_ip;
+    logger.log("%:% %() % ip:% iface:% port:% is_udp:% is_blocking:% is_listening:% ttl:% SO_time:%\n",
+        __FILE__, __LINE__, __FUNCTION__,
+              Common::getCurrentTimeStr(&time_str), ip,
+                iface, port, is_udp, is_blocking,
+                  is_listening, ttl, needs_so_timestamp);
+    addrinfo hints{};
+    hints.ai_family = AF_INET; // IPv4 only.
+    hints.ai_socktype = is_udp ? SOCK_DGRAM : SOCK_STREAM;
+    hints.ai_protocol = is_udp ? IPPROTO_UDP : IPPROTO_TCP;
+    hints.ai_flags = is_listening ? AI_PASSIVE : 0;
+    if (std::isdigit(ip.c_str()[0])){hints.ai_flags |= AI_NUMERICHOST;}// Skip DNS if IP is already resolved.
+    hints.ai_flags |= AI_NUMERICSERV;// Port is numeric. Skip service name lookup.
+    addrinfo *result = nullptr;
+    const auto rc = getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &result);
+    if (rc) {
+      logger.log("getaddrinfo() failed. error:% errno:%\n",gai_strerror(rc), strerror(errno));
+      return -1;
+    }
+    int fd = -1;
+    int one = 1;
+    for (addrinfo *rp = result; rp; rp = rp->ai_next) {
+      fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+      if (fd == -1) {
+        logger.log("socket() failed. errno:%\n",
+          strerror(errno));
         return -1;
       }
-      int fd = -1;
-      int one = 1;
-      for (addrinfo *rp = result; rp; rp = rp->ai_next) {
-        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (fd == -1) {
-          logger.log("socket() failed. errno:%\n",
-            strerror(errno));
+    
+      if (!is_blocking) {
+        if (!setNonBlocking(fd)) {
+          logger.log("setNonBlocking() failed. errno:%\n",strerror(errno));
           return -1;
         }
-      
-        if (!is_blocking) {
-          if (!setNonBlocking(fd)) {
-            logger.log("setNonBlocking() failed. errno:%\n",strerror(errno));
-            return -1;
-          }
-          if (!is_udp && !setNoDelay(fd)) {
-            logger.log("setNoDelay() failed. errno:%\n",strerror(errno));
-            return -1;
-          }
-        }
-        if (!is_listening && connect(fd, rp->ai_addr, rp->ai_addrlen) == -1 && !wouldBlock()) {
-          logger.log("connect() failed. errno:%\n",
-            strerror(errno));
+        if (!is_udp && !setNoDelay(fd)) {
+          logger.log("setNoDelay() failed. errno:%\n",strerror(errno));
           return -1;
         }
-        constexpr int MaxTCPServerBacklog = 1024;
-        // allows immediate bind on the IP + Port of this fd.
-        // otherwise, restarts would have to wait to bind to the same IP + Port. 
-        if (is_listening && setsockopt(fd, SOL_SOCKET,SO_REUSEADDR, reinterpret_cast<const char *>(&one),sizeof(one)) == -1) {
-          logger.log("setsockopt() SO_REUSEADDR failed.errno:%\n", strerror(errno));
-          return -1;
-        }
-        // bind the server.
-        // can also bind client when the port is important.
-        // otherwise kernel picks the port.
-        if (is_listening && bind(fd, rp->ai_addr, rp->ai_addrlen) == -1) {
-          logger.log("bind() failed. errno:%\n",
-            strerror(errno));
-          return -1;
-        }
-        // turn TCP State to LISTEN
-        if (!is_udp && is_listening && listen(fd,MaxTCPServerBacklog) == -1) {
-          logger.log("listen() failed. errno:%\n",
-            strerror(errno));
-          return -1;
-        }
-        return fd;
       }
+      if (!is_listening && connect(fd, rp->ai_addr, rp->ai_addrlen) == -1 && !wouldBlock()) {
+        logger.log("connect() failed. errno:%\n",
+          strerror(errno));
+        return -1;
+      }
+      constexpr int MaxTCPServerBacklog = 1024;
+      // allows immediate bind on the IP + Port of this fd.
+      // otherwise, restarts would have to wait to bind to the same IP + Port. 
+      if (is_listening && setsockopt(fd, SOL_SOCKET,SO_REUSEADDR, reinterpret_cast<const char *>(&one),sizeof(one)) == -1) {
+        logger.log("setsockopt() SO_REUSEADDR failed.errno:%\n", strerror(errno));
+        return -1;
+      }
+      // bind the server.
+      // can also bind client when the port is important.
+      // otherwise kernel picks the port.
+      if (is_listening && bind(fd, rp->ai_addr, rp->ai_addrlen) == -1) {
+        logger.log("bind() failed. errno:%\n",
+          strerror(errno));
+        return -1;
+      }
+      // turn TCP State to LISTEN
+      if (!is_udp && is_listening && listen(fd,MaxTCPServerBacklog) == -1) {
+        logger.log("listen() failed. errno:%\n",
+          strerror(errno));
+        return -1;
+      }
+    }
+    freeaddrinfo(result);
+    return fd;
+  }
 }
