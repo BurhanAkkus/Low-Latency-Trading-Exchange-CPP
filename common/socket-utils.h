@@ -18,13 +18,13 @@
 #include "time-utils.h"
 namespace Common {
   constexpr int MaxTCPServerBacklog = 1024;
-  auto createSocket(Logger &logger, const std::string
+  inline auto createSocket(Logger &logger, const std::string
     &t_ip, const std::string &iface, int port, bool is_udp,
-       bool is_blocking, bool is_listening, int ttl, bool
-         needs_so_timestamp) -> int;
+    bool is_blocking, bool is_listening, int ttl, bool
+    needs_so_timestamp) -> int;
 
-    // gets the socket addr of network interface with name iface.
-    auto getIfaceIP(const std::string &iface) -> std::string {
+  // gets the socket addr of network interface with name iface.
+  inline auto getIfaceIP(const std::string &iface) -> std::string {
     char buf[NI_MAXHOST] = {'\0'};
     ifaddrs *ifaddr = nullptr;
     if (getifaddrs(&ifaddr) != -1) {
@@ -45,7 +45,7 @@ namespace Common {
   // sets the FD to be nonBlocking.
   // After each read, we need to check if the results is 
   // EWouldBlock or EAgain.
-  auto setNonBlocking(int fd) -> bool {
+  inline auto setNonBlocking(int fd) -> bool {
     const auto flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1)
       return false;
@@ -54,7 +54,7 @@ namespace Common {
     return (fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1);
   }
   // Disable Nagle's Algorithm.
-  auto setNoDelay(int fd) -> bool {
+  inline auto setNoDelay(int fd) -> bool {
     int one = 1;
     return (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
       reinterpret_cast<void *>(&one), sizeof(one)) != -1);
@@ -62,31 +62,31 @@ namespace Common {
   // errno is thread-local
   // check it right after a syscall
   // before doing anything.
-  auto wouldBlock() -> bool {
+  inline auto wouldBlock() -> bool {
     // EWOULDBLOCK = EAGAIN
     return (errno == EWOULDBLOCK || errno == EINPROGRESS);
   }
   // Time To Live
   // How many Routers can a packet from this fd can visit
   // before being discarded.
-  auto setTTL(int fd, int ttl) -> bool {
+  inline auto setTTL(int fd, int ttl) -> bool {
     return (setsockopt(fd, IPPROTO_IP, IP_TTL,
       reinterpret_cast<void *>(&ttl), sizeof(ttl)) != -1);
   }
-  auto setMcastTTL(int fd, int mcast_ttl) noexcept -> bool {
+  inline auto setMcastTTL(int fd, int mcast_ttl) noexcept -> bool {
     return (setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL,
       reinterpret_cast<void *>(&mcast_ttl), sizeof
         (mcast_ttl)) != -1);
   }
   // Soft timeStamping.
   // Would use Hardware Timestamping if available/
-  auto setSOTimestamp(int fd) -> bool {
+  inline auto setSOTimestamp(int fd) -> bool {
     int one = 1; // setsockopt needs an address + a length.
     return (setsockopt(fd, SOL_SOCKET, SO_TIMESTAMP,
       reinterpret_cast<void *>(&one), sizeof(one)) != -1);
   }
 
-  auto createSocket(Logger &logger, const std::string&t_ip,
+  inline auto createSocket(Logger &logger, const std::string&t_ip,
     const std::string &iface, int port,
     bool is_udp, bool is_blocking, bool
     is_listening, int ttl, bool
@@ -130,6 +130,10 @@ namespace Common {
           logger.log("setNoDelay() failed. errno:%\n",strerror(errno));
           return -1;
         }
+      }
+      if (needs_so_timestamp && !setSOTimestamp(fd)) {
+        logger.log("setSOTimestamp() failed. errno:%\n", strerror(errno));
+        return -1;
       }
       if (!is_listening && connect(fd, rp->ai_addr, rp->ai_addrlen) == -1 && !wouldBlock()) {
         logger.log("connect() failed. errno:%\n",

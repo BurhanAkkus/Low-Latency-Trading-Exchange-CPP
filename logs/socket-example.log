@@ -1,0 +1,221 @@
+../common/socket-utils.h:97 createSocket() Tue Aug 25 07:11:15 2026 ip:127.0.0.1 iface:lo port:12345 is_udp:0 is_blocking:0 is_listening:1 ttl:0 SO_time:1
+TCPClient 0 is connecting to ip:127.0.0.1, iface:lo, port:12345 !
+../common/socket-utils.h:97 createSocket() Tue Aug 25 07:11:15 2026 ip:127.0.0.1 iface:lo port:12345 is_udp:0 is_blocking:0 is_listening:0 ttl:0 SO_time:1
+../common/tcp-server.cpp:73 poll() Tue Aug 25 07:11:15 2026 EPOLLIN listener_socket:5
+../common/tcp-server.cpp:120 poll() Tue Aug 25 07:11:15 2026 accepted socket:7
+TCPClient 1 is connecting to ip:127.0.0.1, iface:lo, port:12345 !
+../common/socket-utils.h:97 createSocket() Tue Aug 25 07:11:15 2026 ip:127.0.0.1 iface:lo port:12345 is_udp:0 is_blocking:0 is_listening:0 ttl:0 SO_time:1
+../common/tcp-server.cpp:73 poll() Tue Aug 25 07:11:15 2026 EPOLLIN listener_socket:5
+../common/tcp-server.cpp:120 poll() Tue Aug 25 07:11:15 2026 accepted socket:9
+TCPClient 2 is connecting to ip:127.0.0.1, iface:lo, port:12345 !
+../common/socket-utils.h:97 createSocket() Tue Aug 25 07:11:15 2026 ip:127.0.0.1 iface:lo port:12345 is_udp:0 is_blocking:0 is_listening:0 ttl:0 SO_time:1
+../common/tcp-server.cpp:73 poll() Tue Aug 25 07:11:15 2026 EPOLLIN listener_socket:5
+../common/tcp-server.cpp:120 poll() Tue Aug 25 07:11:15 2026 accepted socket:11
+TCPClient 3 is connecting to ip:127.0.0.1, iface:lo, port:12345 !
+../common/socket-utils.h:97 createSocket() Tue Aug 25 07:11:15 2026 ip:127.0.0.1 iface:lo port:12345 is_udp:0 is_blocking:0 is_listening:0 ttl:0 SO_time:1
+../common/tcp-server.cpp:73 poll() Tue Aug 25 07:11:15 2026 EPOLLIN listener_socket:5
+../common/tcp-server.cpp:120 poll() Tue Aug 25 07:11:15 2026 accepted socket:13
+TCPClient 4 is connecting to ip:127.0.0.1, iface:lo, port:12345 !
+../common/socket-utils.h:97 createSocket() Tue Aug 25 07:11:15 2026 ip:127.0.0.1 iface:lo port:12345 is_udp:0 is_blocking:0 is_listening:0 ttl:0 SO_time:1
+../common/tcp-server.cpp:73 poll() Tue Aug 25 07:11:15 2026 EPOLLIN listener_socket:5
+../common/tcp-server.cpp:120 poll() Tue Aug 25 07:11:15 2026 accepted socket:15
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:6 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:7
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:7 len:64 utime:1787634675401985847 ktime:1787634675351895000 diff:50090847
+TCPServer::recvCallback socket:7 msg:Client 0 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675351895000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:7 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:8 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:9
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:9 len:64 utime:1787634675452178765 ktime:1787634675402035000 diff:50143765
+TCPServer::recvCallback socket:9 msg:Client 1 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675402035000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:9 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:10 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:11
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:11 len:64 utime:1787634675502355884 ktime:1787634675452238000 diff:50117884
+TCPServer::recvCallback socket:11 msg:Client 2 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675452238000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:11 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:12 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:13
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:13 len:64 utime:1787634675552511917 ktime:1787634675502421000 diff:50090917
+TCPServer::recvCallback socket:13 msg:Client 3 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675502421000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:13 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:14 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:15
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:15 len:64 utime:1787634675602698234 ktime:1787634675552558000 diff:50140234
+TCPServer::recvCallback socket:15 msg:Client 4 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675552558000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:15 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:6 len:87 utime:1787634675602741932 ktime:1787634675402006000 diff:200735932
+TCPSocket client recvCallback socket:6, received message:TCPServer received msg:Client 0 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675402006000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:6 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:7
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:7 len:64 utime:1787634675652872334 ktime:1787634675602754000 diff:50118334
+TCPServer::recvCallback socket:7 msg:Client 0 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675602754000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:7 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:8 len:87 utime:1787634675652927327 ktime:1787634675452208000 diff:200719327
+TCPSocket client recvCallback socket:8, received message:TCPServer received msg:Client 1 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675452208000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:8 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:9
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:9 len:64 utime:1787634675703064542 ktime:1787634675652940000 diff:50124542
+TCPServer::recvCallback socket:9 msg:Client 1 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675652940000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:9 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:10 len:87 utime:1787634675703120163 ktime:1787634675502384000 diff:200736163
+TCPSocket client recvCallback socket:10, received message:TCPServer received msg:Client 2 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675502384000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:10 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:11
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:11 len:64 utime:1787634675753289476 ktime:1787634675703135000 diff:50154476
+TCPServer::recvCallback socket:11 msg:Client 2 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675703135000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:11 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:12 len:87 utime:1787634675753344032 ktime:1787634675552534000 diff:200810032
+TCPSocket client recvCallback socket:12, received message:TCPServer received msg:Client 3 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675552534000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:12 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:13
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:13 len:64 utime:1787634675803604227 ktime:1787634675753353000 diff:50251227
+TCPServer::recvCallback socket:13 msg:Client 3 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675753353000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:13 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:14 len:87 utime:1787634675803762502 ktime:1787634675602720000 diff:201042502
+TCPSocket client recvCallback socket:14, received message:TCPServer received msg:Client 4 is sending message 0 at time: Tue Aug 25 07:11:15 2026 rx:1787634675602720000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:14 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:15
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:15 len:64 utime:1787634675854136675 ktime:1787634675803808000 diff:50328675
+TCPServer::recvCallback socket:15 msg:Client 4 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675803808000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:15 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:6 len:87 utime:1787634675854275098 ktime:1787634675652897000 diff:201378098
+TCPSocket client recvCallback socket:6, received message:TCPServer received msg:Client 0 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675652897000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:6 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:7
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:7 len:64 utime:1787634675904448274 ktime:1787634675854322000 diff:50126274
+TCPServer::recvCallback socket:7 msg:Client 0 is sending message 2 at time: Tue Aug 25 07:11:15 2026 rx:1787634675854322000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:7 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:8 len:87 utime:1787634675904521964 ktime:1787634675703090000 diff:201431964
+TCPSocket client recvCallback socket:8, received message:TCPServer received msg:Client 1 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675703090000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:8 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:15 2026 EPOLLIN socket:9
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:9 len:64 utime:1787634675954676582 ktime:1787634675904538000 diff:50138582
+TCPServer::recvCallback socket:9 msg:Client 1 is sending message 2 at time: Tue Aug 25 07:11:15 2026 rx:1787634675904538000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:9 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:15 2026 read socket:10 len:87 utime:1787634675954725836 ktime:1787634675753317000 diff:201408836
+TCPSocket client recvCallback socket:10, received message:TCPServer received msg:Client 2 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675753317000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:15 2026 send socket:10 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:11
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:11 len:64 utime:1787634676004913225 ktime:1787634675954734000 diff:50179225
+TCPServer::recvCallback socket:11 msg:Client 2 is sending message 2 at time: Tue Aug 25 07:11:15 2026 rx:1787634675954734000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:11 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:12 len:87 utime:1787634676004959608 ktime:1787634675803680000 diff:201279608
+TCPSocket client recvCallback socket:12, received message:TCPServer received msg:Client 3 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675803680000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:12 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:13
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:13 len:64 utime:1787634676055236445 ktime:1787634676004968000 diff:50268445
+TCPServer::recvCallback socket:13 msg:Client 3 is sending message 2 at time: Tue Aug 25 07:11:16 2026 rx:1787634676004968000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:13 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:14 len:87 utime:1787634676055402494 ktime:1787634675854203000 diff:201199494
+TCPSocket client recvCallback socket:14, received message:TCPServer received msg:Client 4 is sending message 1 at time: Tue Aug 25 07:11:15 2026 rx:1787634675854203000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:14 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:15
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:15 len:64 utime:1787634676105747477 ktime:1787634676055454000 diff:50293477
+TCPServer::recvCallback socket:15 msg:Client 4 is sending message 2 at time: Tue Aug 25 07:11:16 2026 rx:1787634676055454000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:15 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:6 len:87 utime:1787634676105917916 ktime:1787634675904483000 diff:201434916
+TCPSocket client recvCallback socket:6, received message:TCPServer received msg:Client 0 is sending message 2 at time: Tue Aug 25 07:11:15 2026 rx:1787634675904483000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:6 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:7
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:7 len:64 utime:1787634676156227559 ktime:1787634676105997000 diff:50230559
+TCPServer::recvCallback socket:7 msg:Client 0 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676105997000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:7 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:8 len:87 utime:1787634676156393289 ktime:1787634675954700000 diff:201693289
+TCPSocket client recvCallback socket:8, received message:TCPServer received msg:Client 1 is sending message 2 at time: Tue Aug 25 07:11:15 2026 rx:1787634675954700000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:8 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:9
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:9 len:64 utime:1787634676206742481 ktime:1787634676156445000 diff:50297481
+TCPServer::recvCallback socket:9 msg:Client 1 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676156445000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:9 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:10 len:87 utime:1787634676206913484 ktime:1787634676004935000 diff:201978484
+TCPSocket client recvCallback socket:10, received message:TCPServer received msg:Client 2 is sending message 2 at time: Tue Aug 25 07:11:15 2026 rx:1787634676004935000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:10 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:11
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:11 len:64 utime:1787634676257244266 ktime:1787634676206965000 diff:50279266
+TCPServer::recvCallback socket:11 msg:Client 2 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676206965000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:11 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:12 len:87 utime:1787634676257403516 ktime:1787634676055315000 diff:202088516
+TCPSocket client recvCallback socket:12, received message:TCPServer received msg:Client 3 is sending message 2 at time: Tue Aug 25 07:11:16 2026 rx:1787634676055315000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:12 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:13
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:13 len:64 utime:1787634676307671335 ktime:1787634676257471000 diff:50200335
+TCPServer::recvCallback socket:13 msg:Client 3 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676257471000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:13 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:14 len:87 utime:1787634676307824893 ktime:1787634676105822000 diff:202002893
+TCPSocket client recvCallback socket:14, received message:TCPServer received msg:Client 4 is sending message 2 at time: Tue Aug 25 07:11:16 2026 rx:1787634676105822000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:14 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:15
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:15 len:64 utime:1787634676358191430 ktime:1787634676307876000 diff:50315430
+TCPServer::recvCallback socket:15 msg:Client 4 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676307876000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:15 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:6 len:87 utime:1787634676358366208 ktime:1787634676156302000 diff:202064208
+TCPSocket client recvCallback socket:6, received message:TCPServer received msg:Client 0 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676156302000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:6 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:7
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:7 len:64 utime:1787634676408739410 ktime:1787634676358459000 diff:50280410
+TCPServer::recvCallback socket:7 msg:Client 0 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676358459000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:7 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:8 len:87 utime:1787634676408875210 ktime:1787634676206821000 diff:202054210
+TCPSocket client recvCallback socket:8, received message:TCPServer received msg:Client 1 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676206821000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:8 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:9
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:9 len:64 utime:1787634676459211142 ktime:1787634676408910000 diff:50301142
+TCPServer::recvCallback socket:9 msg:Client 1 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676408910000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:9 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:10 len:87 utime:1787634676459392028 ktime:1787634676257318000 diff:202074028
+TCPSocket client recvCallback socket:10, received message:TCPServer received msg:Client 2 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676257318000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:10 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:11
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:11 len:64 utime:1787634676509650265 ktime:1787634676459444000 diff:50206265
+TCPServer::recvCallback socket:11 msg:Client 2 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676459444000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:11 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:12 len:87 utime:1787634676509812994 ktime:1787634676307744000 diff:202068994
+TCPSocket client recvCallback socket:12, received message:TCPServer received msg:Client 3 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676307744000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:12 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:13
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:13 len:64 utime:1787634676560160252 ktime:1787634676509865000 diff:50295252
+TCPServer::recvCallback socket:13 msg:Client 3 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676509865000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:13 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:14 len:87 utime:1787634676560320804 ktime:1787634676358267000 diff:202053804
+TCPSocket client recvCallback socket:14, received message:TCPServer received msg:Client 4 is sending message 3 at time: Tue Aug 25 07:11:16 2026 rx:1787634676358267000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:14 len:64
+../common/tcp-server.cpp:79 poll() Tue Aug 25 07:11:16 2026 EPOLLIN socket:15
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:15 len:64 utime:1787634676610661304 ktime:1787634676560372000 diff:50289304
+TCPServer::recvCallback socket:15 msg:Client 4 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676560372000
+../common/tcp-socket.cpp:104 sendAndRecv() Tue Aug 25 07:11:16 2026 send socket:15 len:87
+TCPServer::defaultRecvFinishedCallback()
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:6 len:87 utime:1787634676610800875 ktime:1787634676408803000 diff:201997875
+TCPSocket client recvCallback socket:6, received message:TCPServer received msg:Client 0 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676408803000
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:8 len:87 utime:1787634676610852573 ktime:1787634676459295000 diff:151557573
+TCPSocket client recvCallback socket:8, received message:TCPServer received msg:Client 1 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676459295000
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:10 len:87 utime:1787634676610902397 ktime:1787634676509725000 diff:101177397
+TCPSocket client recvCallback socket:10, received message:TCPServer received msg:Client 2 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676509725000
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:12 len:87 utime:1787634676610951731 ktime:1787634676560237000 diff:50714731
+TCPSocket client recvCallback socket:12, received message:TCPServer received msg:Client 3 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676560237000
+../common/tcp-socket.cpp:70 sendAndRecv() Tue Aug 25 07:11:16 2026 read socket:14 len:87 utime:1787634676611000082 ktime:1787634676610736000 diff:264082
+TCPSocket client recvCallback socket:14, received message:TCPServer received msg:Client 4 is sending message 4 at time: Tue Aug 25 07:11:16 2026 rx:1787634676610736000

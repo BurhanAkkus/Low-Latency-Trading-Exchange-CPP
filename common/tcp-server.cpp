@@ -105,9 +105,6 @@ namespace Common{
             }
         }
         while (have_new_connection) {
-            logger_.log("%:% %() % have_new_connection\n",
-                __FILE__, __LINE__, __FUNCTION__,
-                Common::getCurrentTimeStr(&time_str_));
             sockaddr_storage sockaddr_;
             socklen_t socklen = sizeof(sockaddr_);
             auto fd = accept(listener_socket_.fd_,reinterpret_cast<sockaddr*>(&sockaddr_),&socklen);
