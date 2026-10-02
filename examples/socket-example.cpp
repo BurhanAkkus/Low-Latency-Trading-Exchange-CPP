@@ -37,8 +37,6 @@ int main(){
     tcp_server.recv_finished_callback_= tcpServerRecvFinishedCallback;
     tcp_server.listen(iface,port);
     
-    // a separate thread for tcp_server.
-
     // clients.
     std::vector<TCPSocket*> clients(5);
     for(int i = 0; i < clients.size(); i++){
@@ -48,8 +46,7 @@ int main(){
         clients[i]->connect(ip,iface,port,false);
         tcp_server.poll(); // we process each connection as it comes.
     }
-    // a separate thread for clients.
-
+    
     // simulate messages sent and received.
     using namespace std::literals::chrono_literals;
     // clients send message
