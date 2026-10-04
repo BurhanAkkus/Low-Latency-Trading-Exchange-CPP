@@ -6,10 +6,10 @@
 // Carry this implementation to use memory-pool.
 
 // Caveats:
-// 1-> All LFQueues should be compile-time defined.
-// No runtime declaration, the vector initialization is from free memory.
+// 1-> All LFQueues should be compile-time initialized.
+// No runtime initialization, the vector initialization is from free memory.
 // 2-> Can overwrite unread values if producer is fast enough to lap consumer.
-// 3-> Reader crushes when reading invalid.
+// 3-> Reader returns nullptr when there is nothing to read..
 namespace Common{
     template<typename T>
     class LFQueue final{
