@@ -4,6 +4,15 @@
 #include "./macros.h"
 #include <string>
 namespace Common{
+    /*
+        ToString functions seem like they allocate dynamically but they don't.
+        Upto 15 characters (10^15) is stored in the std::string object with libstdc++,
+        this is upto 22 characters with libc++.
+
+        They are also noexcept even though they can throw std::bad_alloc.
+        We won't do exception handling so when they throw the program exits anyway.
+    */
+
     // === OrderId ===
     using OrderId = uint64_t;
     constexpr auto OrderId_INVALID = std::numeric_limits<OrderId>::max(); // Uninitialized.
@@ -11,9 +20,6 @@ namespace Common{
     constexpr inline bool isValidOrderId(OrderId orderId) noexcept {
         return orderId != OrderId_INVALID;
     }
-    //ToString
-    // Check
-    // Allocates on the Heap. Keep of the Hot Path!
     inline std::string orderIdToString(OrderId orderId){
         if(UNLIKELY(!isValidOrderId(orderId))){
             return "INVALID";
@@ -25,13 +31,10 @@ namespace Common{
     // === TickerId ===
     using TickerId = uint64_t;
     constexpr auto TickerId_INVALID = std::numeric_limits<TickerId>::max();
-
+    
     constexpr inline bool isValidTickerId(TickerId tickerId) noexcept{
         return tickerId != TickerId_INVALID;
     }
-    // ToString
-    // Check
-    // Allocates on the Heap. Keep of the Hot Path!
     inline auto tickerIdToString(TickerId tickerId) -> std::string{
         if (UNLIKELY(!isValidTickerId(tickerId)))
         { return "INVALID";}
@@ -44,7 +47,6 @@ namespace Common{
     constexpr bool isValidClientId(ClientId clientId) noexcept{
         return clientId != ClientId_INVALID;
     }
-    // ToString
     inline auto clientIdToString(ClientId clientId) noexcept -> std::string{
         if(UNLIKELY(!isValidClientId(clientId))){
             return "INVALID";
