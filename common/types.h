@@ -38,5 +38,17 @@ namespace Common{
         return std::to_string(tickerId);
     }
 
-    
+    // === ClientId ===
+    using ClientId = uint64_t;
+    constexpr auto ClientId_INVALID = std::numeric_limits<ClientId>::max();
+    constexpr bool isValidClientId(ClientId clientId) noexcept{
+        return clientId != ClientId_INVALID;
+    }
+    // ToString
+    inline auto clientIdToString(ClientId clientId) noexcept -> std::string{
+        if(UNLIKELY(!isValidClientId(clientId))){
+            return "INVALID";
+        }
+        return std::to_string(clientId);
+    }
 }
