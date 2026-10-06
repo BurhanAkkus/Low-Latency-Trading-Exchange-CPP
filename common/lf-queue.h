@@ -32,9 +32,6 @@ namespace Common{
         auto updateWriteIndex() noexcept{
             next_to_write_ = (next_to_write_ + 1) % store_.size();
             size_++;
-            if(size_ > store_.size()){
-                std::cout <<"Next write will OVERRIDE the element at: " << next_to_write_ << std::endl; 
-            }
         }
         auto getNextReadTo() const noexcept -> const T*{
             return (next_to_write_ == next_to_read_)? nullptr : &store_[next_to_read_];
