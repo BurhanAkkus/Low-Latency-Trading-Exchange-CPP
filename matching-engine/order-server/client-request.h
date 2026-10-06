@@ -34,7 +34,7 @@ namespace Exchange{
         Price price_ = Price_INVALID;
         Qty qty_ = Qty_INVALID;
         Side side_ = Side::INVALID;
-        auto toString() noexcept{
+        auto toString() const noexcept{
             std::stringstream ss;
             ss << "MEClientRequest";
             ss << "[";
@@ -50,5 +50,5 @@ namespace Exchange{
         }
     };
 #pragma pack(pop)
-using ClientREquestLFQueue = LFQueue<MEClientRequest>;
+using ClientRequestLFQueue = LFQueue<MEClientRequest>;
 }
