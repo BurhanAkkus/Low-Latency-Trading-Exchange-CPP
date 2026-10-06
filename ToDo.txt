@@ -114,3 +114,5 @@ Composite object movable vs unmovable.
 54-> Investigate FD read flags - socket flags -.
 
 55-> Investigate Nagle's Algorithm.
+
+56-> Migrate CamelCase to snake_case
