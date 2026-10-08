@@ -32,7 +32,9 @@ namespace Exchange{
               side_(side),
               price_(price),
               qty_(qty),
-              priority_(priority) {}
+              priority_(priority),
+              next_order_{next_order},
+              prev_order_{prev_order} {}
     auto toString() const -> std::string;
   };
   struct MEOrdersAtPrice{

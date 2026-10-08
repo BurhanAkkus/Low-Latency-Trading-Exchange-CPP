@@ -31,7 +31,7 @@ namespace Exchange{
         MatchingEngine &operator=(const MatchingEngine &&) =
         delete;
         private:
-        OrderBookHashMap ticker_order_book_;
+        //OrderBookHashMap ticker_order_book_;
         ClientRequestLFQueue* incoming_requests_ = nullptr;
         ClientResponseLFQueue* outgoing_responses_ = nullptr;
         MEMarketUpdateLFQueue* outgoing_market_updates_ = nullptr;
@@ -57,18 +57,18 @@ namespace Exchange{
         }
 
         auto processClientRequest(const MEClientRequest* incoming_request) const noexcept -> void{
-            auto order_book = ticker_order_book_[incoming_request->tickerId_];
-            switch(incoming_request->type_){
-                case ClientRequestType::NEW:
-                    order_book -> add(incoming_request);
-                    return;
-                case ClientRequestType::CANCEL:
-                    order_book -> cancel(incoming_request);
-                    return;
-                default:
-                    FATAL("Received INVALID client request!!");
-                return;
-            }
+            // auto order_book = ticker_order_book_[incoming_request->tickerId_];
+            // switch(incoming_request->type_){
+            //     case ClientRequestType::NEW:
+            //         order_book -> add(incoming_request);
+            //         return;
+            //     case ClientRequestType::CANCEL:
+            //         order_book -> cancel(incoming_request);
+            //         return;
+            //     default:
+            //         FATAL("Received INVALID client request!!");
+            //     return;
+            // }
         }
 
         auto sendClientResponse(const MEClientResponse *client_response) noexcept {
