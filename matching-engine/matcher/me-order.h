@@ -17,14 +17,12 @@ namespace Exchange{
     Side side_ = Side::INVALID;
     Price price_ = Price_INVALID;
     Qty qty_ = Qty_INVALID;
-    Priority priority_ = Priority_INVALID;
     MEOrder* next_order_ = nullptr;
     MEOrder* prev_order_ = nullptr;
     MEOrder() = default;
     MEOrder(TickerId ticker_id, ClientId client_id, OrderId
       client_order_id, OrderId market_order_id, Side side,
-      Price price,Qty qty, Priority priority, MEOrder
-      *prev_order, MEOrder *next_order) noexcept
+      Price price,Qty qty,MEOrder *next_order, MEOrder *prev_order) noexcept
         :     ticker_id_(ticker_id),
               client_id_(client_id),
               client_order_id_(client_order_id),
@@ -32,22 +30,15 @@ namespace Exchange{
               side_(side),
               price_(price),
               qty_(qty),
-              priority_(priority),
               next_order_{next_order},
               prev_order_{prev_order} {}
     auto toString() const -> std::string;
   };
   struct MEOrdersAtPrice{
-    Price price_ = Price_INVALID;
     MEOrder* first_order_ = nullptr;
-  };
-  struct MEOrdersAtPriceList{
-    Side side_ = Side::INVALID;
-    std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> price_levels_;
   };
   //ToDo
   // implement allocators utilizing memoryPool.
   using OrderHashMap = std::map<OrderId,MEOrder*>;
-  using ClientOrderHashMap = std::map<ClientId,OrderHashMap>;
   using OrdersAtPriceMap = std::map<Price,MEOrdersAtPrice*>;
 }
