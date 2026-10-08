@@ -2,6 +2,7 @@
 #include "common/constants.h"
 #include <sstream>
 #include <map>
+#include <list>
 using namespace Common;
 
 namespace Exchange{
@@ -31,29 +32,13 @@ namespace Exchange{
               priority_(priority) {}
     auto toString() const -> std::string;
   };
-  struct MEOrderLinkedListNode{
-    MEOrder meOrder;
-    MEOrderLinkedListNode* next = nullptr;
-    MEOrderLinkedListNode* prev = nullptr;
-  };
   struct MEOrdersAtPrice{
     Price price_ = Price_INVALID;
-    MEOrderLinkedListNode* head = nullptr; 
-    MEOrderLinkedListNode* tail = nullptr; 
-    MEOrdersAtPrice() = default;
-    MEOrdersAtPrice(Price price,MEOrderLinkedListNode* head,MEOrderLinkedListNode* tail):price_{price},head{head},tail{tail}{};
+    std::list<MEOrder> list;
   };
-  struct MEOrdersAtPriceLinkedListNode{
-    MEOrdersAtPrice meOrdersAtPrice;
-    MEOrdersAtPriceLinkedListNode* next = nullptr;
-    MEOrdersAtPriceLinkedListNode* prev = nullptr;
-  };
-  struct MEOrdersAtPriceLinkedList{
+  struct MEOrdersAtPriceList{
     Side side_ = Side::INVALID;
-    MEOrdersAtPriceLinkedListNode* head = nullptr;
-    MEOrdersAtPriceLinkedListNode* tail = nullptr;
-    MEOrdersAtPriceLinkedList() = default;
-    MEOrdersAtPriceLinkedList(Side side,MEOrdersAtPriceLinkedListNode* head, MEOrdersAtPriceLinkedListNode* tail): side_{side},head{head},tail{tail}{};
+    std::list<MEOrdersAtPrice> list;
   };
   //ToDo
   // Implement Hashmap<OrderId, MEOrder*>
