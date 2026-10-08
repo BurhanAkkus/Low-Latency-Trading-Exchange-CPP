@@ -53,7 +53,7 @@ namespace Exchange{
   };
   //ToDo
   // Implement Hashmap<OrderId, MEOrder*>
-  using OrderHashMap = std::map<OrderId,MEOrder *>;
+  using OrderHashMap = std::map<OrderId,MEOrder*>;
   //ToDo
   // Implement Hashmap<CustomerId, OrderHashMap>
   using ClientOrderHashMap = std::map<ClientId,OrderHashMap>;
