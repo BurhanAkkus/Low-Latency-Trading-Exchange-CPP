@@ -33,13 +33,24 @@ namespace Exchange{
   };
   struct MEOrderLinkedListNode{
     MEOrder meOrder;
-    MEOrder* next = nullptr;
-    MEOrder* prev = nullptr;
+    MEOrderLinkedListNode* next = nullptr;
+    MEOrderLinkedListNode* prev = nullptr;
   };
   struct MEOrdersAtPrice{
+    Price price_ = Price_INVALID;
     MEOrderLinkedListNode* head = nullptr; 
     MEOrderLinkedListNode* tail = nullptr; 
   };
+  struct MEOrdersAtPriceLinkedListNode{
+    MEOrdersAtPrice meOrdersAtPrice;
+    MEOrdersAtPriceLinkedListNode* next;
+    MEOrdersAtPriceLinkedListNode* prev;
+  };
+  struct MEOrdersAtPriceLinkedList{
+    Side side_ = Side::INVALID;
+    MEOrdersAtPriceLinkedListNode* head = nullptr;
+    MEOrdersAtPriceLinkedListNode* tail = nullptr;
+  }
   //ToDo
   // Implement Hashmap<OrderId, MEOrder*>
   using OrderHashMap = std::map<OrderId,MEOrder *>;
