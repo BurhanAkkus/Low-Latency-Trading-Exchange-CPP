@@ -50,7 +50,7 @@ namespace Exchange{
     Side side_ = Side::INVALID;
     MEOrdersAtPriceLinkedListNode* head = nullptr;
     MEOrdersAtPriceLinkedListNode* tail = nullptr;
-  }
+  };
   //ToDo
   // Implement Hashmap<OrderId, MEOrder*>
   using OrderHashMap = std::map<OrderId,MEOrder *>;
