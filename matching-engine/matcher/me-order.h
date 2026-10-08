@@ -1,3 +1,4 @@
+#pragma once
 #include "common/types.h"
 #include "common/constants.h"
 #include <sstream>
@@ -5,7 +6,6 @@
 #include <array>
 using namespace Common;
 
-#pragma once
 namespace Exchange{
 // ToDo 
 // align objects to 64 bytes.
