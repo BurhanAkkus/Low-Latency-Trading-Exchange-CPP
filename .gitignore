@@ -1,1 +1,5 @@
 .vscode/
+
+# Build artifacts
+cmake-build-*/
+build/
