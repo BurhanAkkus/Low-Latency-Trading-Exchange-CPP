@@ -11,7 +11,7 @@ namespace Exchange{
             outgoing_market_updates_{market_updates},
             logger_{"exchange_matching_engine.log"}{
                 for(auto i = 0; i < ticker_order_book_.size(); i++){
-                    ticker_order_book_[i] = new MEOrderBook(i,&logger_,this);
+                    //ticker_order_book_[i] = new MEOrderBook(i,&logger_,this);
                 }
             };
     MatchingEngine::~MatchingEngine(){
