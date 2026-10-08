@@ -2,9 +2,10 @@
 #include "common/constants.h"
 #include <sstream>
 #include <map>
-#include <list>
+#include <array>
 using namespace Common;
 
+#pragma once
 namespace Exchange{
 // ToDo 
 // align objects to 64 bytes.
@@ -17,6 +18,8 @@ namespace Exchange{
     Price price_ = Price_INVALID;
     Qty qty_ = Qty_INVALID;
     Priority priority_ = Priority_INVALID;
+    MEOrder* next_order_ = nullptr;
+    MEOrder* prev_order_ = nullptr;
     MEOrder() = default;
     MEOrder(TickerId ticker_id, ClientId client_id, OrderId
       client_order_id, OrderId market_order_id, Side side,
@@ -34,16 +37,15 @@ namespace Exchange{
   };
   struct MEOrdersAtPrice{
     Price price_ = Price_INVALID;
-    std::list<MEOrder> list;
+    MEOrder* first_order_ = nullptr;
   };
   struct MEOrdersAtPriceList{
     Side side_ = Side::INVALID;
-    std::list<MEOrdersAtPrice> list;
+    std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> price_levels_;
   };
   //ToDo
-  // Implement Hashmap<OrderId, MEOrder*>
+  // implement allocators utilizing memoryPool.
   using OrderHashMap = std::map<OrderId,MEOrder*>;
-  //ToDo
-  // Implement Hashmap<CustomerId, OrderHashMap>
   using ClientOrderHashMap = std::map<ClientId,OrderHashMap>;
+  using OrdersAtPriceMap = std::map<Price,MEOrdersAtPrice*>;
 }
