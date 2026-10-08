@@ -40,16 +40,20 @@ namespace Exchange{
     Price price_ = Price_INVALID;
     MEOrderLinkedListNode* head = nullptr; 
     MEOrderLinkedListNode* tail = nullptr; 
+    MEOrdersAtPrice() = default;
+    MEOrdersAtPrice(Price price,MEOrderLinkedListNode* head,MEOrderLinkedListNode* tail):price_{price},head{head},tail{tail}{};
   };
   struct MEOrdersAtPriceLinkedListNode{
     MEOrdersAtPrice meOrdersAtPrice;
-    MEOrdersAtPriceLinkedListNode* next;
-    MEOrdersAtPriceLinkedListNode* prev;
+    MEOrdersAtPriceLinkedListNode* next = nullptr;
+    MEOrdersAtPriceLinkedListNode* prev = nullptr;
   };
   struct MEOrdersAtPriceLinkedList{
     Side side_ = Side::INVALID;
     MEOrdersAtPriceLinkedListNode* head = nullptr;
     MEOrdersAtPriceLinkedListNode* tail = nullptr;
+    MEOrdersAtPriceLinkedList() = default;
+    MEOrdersAtPriceLinkedList(Side side,MEOrdersAtPriceLinkedListNode* head, MEOrdersAtPriceLinkedListNode* tail): side_{side},head{head},tail{tail}{};
   };
   //ToDo
   // Implement Hashmap<OrderId, MEOrder*>
