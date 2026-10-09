@@ -2,6 +2,7 @@
 #include "common/constants.h"
 #include "common/utils.h"
 #include "matcher/me-order.h"
+#include <array>
 using namespace Common;
 
 namespace Exchange{
