@@ -30,9 +30,9 @@ namespace Exchange{
         MatchingEngine &operator=(const MatchingEngine &) = delete;
         MatchingEngine &operator=(const MatchingEngine &&) = delete;
         void MatchingEngine::run() noexcept;
-        auto processClientRequest(const MEClientRequest* incoming_request) const noexcept -> void;
-        auto sendClientResponse(const MEClientResponse *client_response) noexcept;
-        auto sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
+        void processClientRequest(const MEClientRequest* incoming_request) const noexcept -> void;
+        void sendClientResponse(const MEClientResponse *client_response) noexcept;
+        void sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
     
         private:
         //ToDo
