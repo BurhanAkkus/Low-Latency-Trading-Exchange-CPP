@@ -10,6 +10,7 @@
 #include "matching-engine/order-server/client-response.h"
 #include "matching-engine/market-data/market-update.h"
 #include <array>
+#include <bit>
 using namespace Common;
 
 namespace Exchange{
@@ -36,6 +37,12 @@ namespace Exchange{
         // Valid price range is [1, ME_MAX_PRICE_LEVELS]
         uint64_t head_of_bid_ = 0;
         uint64_t head_of_ask_ = ME_MAX_PRICE_LEVELS + 1;
+        // Bit (price - 1) is set while that price level has orders: price 1 is bit 0 of word 0,
+        // price 256 is bit 63 of word 3. Finds the next head when the head level empties.
+        static_assert(ME_MAX_PRICE_LEVELS % 64 == 0, "Price levels must fill whole 64 bit words.");
+        using LevelBits = std::array<uint64_t, ME_MAX_PRICE_LEVELS / 64>;
+        LevelBits ask_levels_{};
+        LevelBits bid_levels_{};
         std::array<std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>,ME_MAX_NUM_CLIENTS> client_orders_{};
         MemoryPool<MEOrder, ME_MAX_ORDER_IDS> order_memory_pool_;
         TickerId ticker_id_;
@@ -49,7 +56,13 @@ namespace Exchange{
             return next_market_order_id_++;
         }
         //ToDo
-        // price has to be validated before here.
+        // price has to be validated before here, price 0 would index word -1.
+        static inline auto setLevel(LevelBits& levels, Price price) noexcept{
+            levels[(price - 1) / 64] |= 1ull << ((price - 1) % 64);
+        }
+        static inline auto clearLevel(LevelBits& levels, Price price) noexcept{
+            levels[(price - 1) / 64] &= ~(1ull << ((price - 1) % 64));
+        }
         inline auto getSellOrdersAtPrice(Price price) noexcept->MEOrdersAtPrice*{
             return &sell_orders[price];
         }

@@ -55,6 +55,7 @@ namespace Exchange{
                     leaves_qty, nullptr, nullptr);
                 order->next_order_ = order->prev_order_ = order;
                 level.first_order_ = order;
+                setLevel(ask_levels_, price);
             }
             // update heads
             compareAndAssignMin(head_of_ask_,price);
@@ -91,6 +92,7 @@ namespace Exchange{
                     leaves_qty, nullptr, nullptr);
                 order->next_order_ = order->prev_order_ = order;
                 level.first_order_ = order;
+                setLevel(bid_levels_, price);
             }
             //update head
             if (price > head_of_bid_) head_of_bid_ = price;
@@ -232,6 +234,7 @@ namespace Exchange{
         MEOrder* next_order;
         if(order->next_order_ == order){
             level.first_order_ = nullptr;
+            clearLevel(ask_levels_, order->price_);
             if(head_of_ask_ == order->price_){findNextSellHead();}
             next_order = getBestSellOrder();
         }
@@ -255,6 +258,7 @@ namespace Exchange{
         MEOrder* next_order;
         if(order->next_order_ == order){
             level.first_order_ = nullptr;
+            clearLevel(bid_levels_, order->price_);
             if(head_of_bid_ == order->price_){findNextBuyHead();}
             next_order = getBestBuyOrder();
         }
@@ -271,18 +275,26 @@ namespace Exchange{
         return next_order;
     }
 
-    // ToDo
-    // optimize the walk via a heap?.
+    // The old head level just emptied, every other ask is above it: the new head is the
+    // lowest set bit. ME_MAX_PRICE_LEVELS + 1 if there are no asks left.
     inline void MEOrderBook::findNextSellHead() noexcept {
-        head_of_ask_++;
-        while(head_of_ask_ <= ME_MAX_PRICE_LEVELS &&  sell_orders[head_of_ask_].first_order_ == nullptr ){
-            head_of_ask_++;
+        for(size_t w = head_of_ask_ / 64; w < ask_levels_.size(); w++){
+            if(ask_levels_[w]){
+                head_of_ask_ = w * 64 + std::countr_zero(ask_levels_[w]) + 1;
+                return;
+            }
         }
+        head_of_ask_ = ME_MAX_PRICE_LEVELS + 1;
     }
+    // Highest set bit, 0 if there are no bids left.
     inline void MEOrderBook::findNextBuyHead() noexcept {
-        head_of_bid_ --;
-        while(head_of_bid_ > 0 &&  buy_orders[head_of_bid_].first_order_ == nullptr){
-            head_of_bid_--;
+        // (head + 63) / 64 is one past the head's word, w-- makes the head's word the first checked.
+        for(size_t w = (head_of_bid_ + 63) / 64; w-- > 0;){
+            if(bid_levels_[w]){
+                head_of_bid_ = w * 64 + 63 - std::countl_zero(bid_levels_[w]) + 1;
+                return;
+            }
         }
+        head_of_bid_ = 0;
     }
 }
