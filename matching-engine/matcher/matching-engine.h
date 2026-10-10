@@ -17,12 +17,14 @@ using namespace Common;
 namespace Exchange{
     class MatchingEngine final{
         public:
+        // logger_core_id / core_id pin the logger / matching engine thread, -1 leaves it to the OS.
         MatchingEngine(
             ClientRequestLFQueue* client_requests,
             ClientResponseLFQueue* client_responses,
-            MEMarketUpdateLFQueue* market_updates);
+            MEMarketUpdateLFQueue* market_updates,
+            int logger_core_id = -1);
         ~MatchingEngine();
-        auto start() -> void;
+        auto start(int core_id = -1) -> void;
         auto stop() -> void;
         // Delete defaults.
         MatchingEngine() = delete;

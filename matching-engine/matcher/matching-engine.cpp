@@ -5,11 +5,12 @@ using namespace Common;
 namespace Exchange{
     MatchingEngine::MatchingEngine(ClientRequestLFQueue* client_requests,
             ClientResponseLFQueue* client_responses,
-            MEMarketUpdateLFQueue* market_updates):
+            MEMarketUpdateLFQueue* market_updates,
+            int logger_core_id):
             incoming_requests_{client_requests},
             outgoing_responses_{client_responses},
             outgoing_market_updates_{market_updates},
-            logger_{"exchange_matching_engine.log"}{
+            logger_{"exchange_matching_engine.log", logger_core_id}{
                 //ToDo
                 // should initialize in consecutive memory chunk.
                  for(uint64_t i = 0; i < ticker_order_book_.size(); i++){
@@ -27,11 +28,9 @@ namespace Exchange{
         outgoing_responses_ = nullptr;
         outgoing_market_updates_ = nullptr;
     }
-    auto MatchingEngine::start() -> void {
+    auto MatchingEngine::start(int core_id) -> void {
         run_ = true;
-        //ToDo
-        // Check Thread function. 
-        thread_ = Common::createAndStartThread(-1, "Exchange/MatchingEngine", [this]() { run(); });
+        thread_ = Common::createAndStartThread(core_id, "Exchange/MatchingEngine", [this]() { run(); });
         ASSERT(thread_ != nullptr, "Failed to start MatchingEngine thread.");
     }
     auto MatchingEngine::stop() -> void {
