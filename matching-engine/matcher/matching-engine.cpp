@@ -18,8 +18,7 @@ namespace Exchange{
             };
     MatchingEngine::~MatchingEngine(){
         run_ = false;
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(1s);
+        if (thread_) { thread_->join(); delete thread_; thread_ = nullptr;}
         for(auto& order_book : ticker_order_book_) {
             delete order_book;
             order_book = nullptr;
@@ -30,9 +29,10 @@ namespace Exchange{
     }
     auto MatchingEngine::start() -> void {
         run_ = true;
-        ASSERT(Common::createAndStartThread(-1,
-        "Exchange/MatchingEngine", [this]() { run(); }) !=
-        nullptr, "Failed to start MatchingEngine thread.");
+        //ToDo
+        // Check Thread function. 
+        thread_ = Common::createAndStartThread(-1, "Exchange/MatchingEngine", [this]() { run(); });
+        ASSERT(thread_ != nullptr, "Failed to start MatchingEngine thread.");
     }
     auto MatchingEngine::stop() -> void {
         run_ = false;
@@ -55,14 +55,14 @@ namespace Exchange{
         }
 
     auto MatchingEngine::processClientRequest(const MEClientRequest* incoming_request) noexcept -> void{
-        auto& order_book = ticker_order_book_[incoming_request->tickerId_];
+        auto& order_book = ticker_order_book_[incoming_request->ticker_id_];
         switch(incoming_request->type_){
             case ClientRequestType::NEW:
-                order_book->add(incoming_request->clientId_,incoming_request->order_id_,
+                order_book->add(incoming_request->client_id_,incoming_request->order_id_,
                     incoming_request->side_,incoming_request->price_,incoming_request->qty_);
                 return;
             case ClientRequestType::CANCEL:
-                order_book->cancel(incoming_request->clientId_,incoming_request->order_id_);
+                order_book->cancel(incoming_request->client_id_,incoming_request->order_id_);
                 return;
             default:
                 FATAL("Received INVALID client request!!");

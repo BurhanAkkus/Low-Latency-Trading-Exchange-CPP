@@ -40,9 +40,10 @@ namespace Exchange{
         ClientRequestLFQueue* incoming_requests_ = nullptr;
         ClientResponseLFQueue* outgoing_responses_ = nullptr;
         MEMarketUpdateLFQueue* outgoing_market_updates_ = nullptr;
-        std::atomic_bool run_ = false;
+        volatile bool run_ = false;
         Logger logger_;
         std::string time_str_;
+        std::thread* thread_ = nullptr;
         std::array<MEOrderBook*,ME_MAX_TICKERS> ticker_order_book_;
         
     };
