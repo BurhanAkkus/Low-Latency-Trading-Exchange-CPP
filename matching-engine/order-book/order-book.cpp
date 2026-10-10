@@ -255,6 +255,8 @@ namespace Exchange{
         return next_order;
     }
 
+    // ToDo
+    // optimize the walk via a heap?.
     inline void MEOrderBook::findNextSellHead() noexcept {
         head_of_ask_++;
         while(head_of_ask_ <= ME_MAX_PRICE_LEVELS &&  sell_orders[head_of_ask_].first_order_ == nullptr ){
