@@ -3,7 +3,9 @@
 #include <limits>
 #include "./macros.h"
 
-namespace Common{ 
+namespace Common{
+    // x86-64. std::hardware_destructive_interference_size warns (-Winterference-size) in headers.
+    constexpr size_t CACHE_LINE_SIZE = 64;
     // Logger
     constexpr size_t LOG_QUEUE_SIZE = 8 * 1024 * 1024;
     // Matching Engine
