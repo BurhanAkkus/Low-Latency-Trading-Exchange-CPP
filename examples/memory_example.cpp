@@ -20,8 +20,8 @@ std::ostream& operator<<(std::ostream& os, const MyStruct& ms){
 
 int main(){
     using namespace Common;
-    MemoryPool<double> prim_pool{45};
-    MemoryPool<MyStruct> struct_pool{45};
+    MemoryPool<double, 45> prim_pool;
+    MemoryPool<MyStruct, 45> struct_pool;
     for(int i = 0; i < 50; i++){
         auto pret = prim_pool.allocate(i);
         auto sret = struct_pool.allocate({i,i+1,i+2});

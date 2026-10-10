@@ -37,7 +37,7 @@ namespace Exchange{
         uint64_t head_of_bid_ = 0;
         uint64_t head_of_ask_ = ME_MAX_PRICE_LEVELS + 1;
         std::array<std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>,ME_MAX_NUM_CLIENTS> client_orders_{};
-        MemoryPool<MEOrder> order_memory_pool_{ME_MAX_ORDER_IDS};
+        MemoryPool<MEOrder, ME_MAX_ORDER_IDS> order_memory_pool_;
         TickerId ticker_id_;
         OrderId next_market_order_id_ = 0;
         MEClientResponse client_response_;
