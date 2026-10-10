@@ -16,7 +16,7 @@ namespace Exchange{
         if(client_orders_[client_id][client_order_id] != nullptr){
             client_response_ = {ClientResponseType::REJECTED,
                 client_id, ticker_id_, client_order_id,
-                OrderId_INVALID, side, price, 0, qty};
+                OrderId_INVALID, side, price, 0, 0};
             matching_engine_->sendClientResponse(&client_response_);
             return;
         }
@@ -31,6 +31,7 @@ namespace Exchange{
             addBuyOrder(client_id,client_order_id,price,qty,new_market_order_id);
         }
     }
+    
     void MEOrderBook::addSellOrder(ClientId client_id, OrderId client_order_id,  Price price, Qty qty, OrderId new_market_order_id) noexcept{
         const auto leaves_qty = remainingFromMatchingSell(price, qty, client_id, client_order_id, new_market_order_id);
         if(LIKELY(leaves_qty)){
@@ -63,7 +64,6 @@ namespace Exchange{
             matching_engine_->sendMarketUpdate(&market_update_);
         }
     }   
-
     void MEOrderBook::addBuyOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept{
         const auto leaves_qty = remainingFromMatchingBuy(price, qty, client_id, client_order_id, new_market_order_id);
         if(LIKELY(leaves_qty)){
@@ -100,10 +100,6 @@ namespace Exchange{
     // ToDo - Optimize
     // erase all orders at once from a level.
     Qty MEOrderBook::remainingFromMatchingBuy(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{
-        // ToDo
-        // Trade off on Likely vs Unlikely.
-        // Likely -> pays 1 compare for passive orders
-        // Unlikely -> guesses wrong on aggressive orders.
         auto best_offer = getBestSellOrder();
         while(best_offer && best_offer->price_ <= price && qty){
             auto fill = std::min(qty,best_offer->qty_);
@@ -183,6 +179,34 @@ namespace Exchange{
         return qty;
     }
 
+
+    void MEOrderBook::cancel(ClientId client_id, OrderId client_order_id) noexcept{
+        auto order = client_orders_[client_id][client_order_id];
+        //ToDo - validation
+        // assume always valid input.
+        // if(UNLIKELY(order == nullptr)){
+        //     client_response_ = {ClientResponseType::CANCEL_REJECTED,
+        //         client_id, ticker_id_,client_order_id,
+        //         OrderId_INVALID , Side::INVALID, Price_INVALID, Qty_INVALID, Qty_INVALID};
+        //     matching_engine_->sendClientResponse(&client_response_);
+        //     return;
+        // }
+        client_response_ = {ClientResponseType::CANCELLED,
+            order->client_id_, ticker_id_, order->client_order_id_,
+            order ->market_order_id_ , order->side_, order->price_, 0, 0};
+        matching_engine_->sendClientResponse(&client_response_);
+        market_update_ = {MarketUpdateType::CANCEL,
+            order->market_order_id_,ticker_id_, order->side_,
+            order->price_, 0};
+        matching_engine_->sendMarketUpdate(&market_update_);
+        if(order->side_ == Side::BUY){ 
+            eraseBuyOrder(order);
+        }
+        else{
+            eraseSellOrder(order);
+        }
+    }
+        
     // Preserves head
     MEOrder* MEOrderBook::eraseSellOrder(MEOrder* order) noexcept {
         // remove from client orders.
@@ -190,10 +214,9 @@ namespace Exchange{
         auto& level = sell_orders[order->price_];
         // only order left at price
         MEOrder* next_order;
-        if(UNLIKELY(order->next_order_ == order)){
+        if(order->next_order_ == order){
             level.first_order_ = nullptr;
-            // find next head.
-            findNextSellHead();
+            if(head_of_ask_ == order->price_){findNextSellHead();}
             next_order = getBestSellOrder();
         }
         else{
@@ -208,16 +231,15 @@ namespace Exchange{
         order_memory_pool_.deallocate(order);
         return next_order;
     }
-
     MEOrder* MEOrderBook::eraseBuyOrder(MEOrder* order) noexcept {
         // remove from client orders.
         client_orders_[order->client_id_][order->client_order_id_] = nullptr;
         auto& level = buy_orders[order->price_];
         // only order left at price
         MEOrder* next_order;
-        if(UNLIKELY(order->next_order_ == order)){
+        if(order->next_order_ == order){
             level.first_order_ = nullptr;
-            findNextBuyHead();
+            if(head_of_bid_ == order->price_){findNextBuyHead();}
             next_order = getBestBuyOrder();
         }
         else{
@@ -239,7 +261,6 @@ namespace Exchange{
             head_of_ask_++;
         }
     }
-    
     inline void MEOrderBook::findNextBuyHead() noexcept {
         head_of_bid_ --;
         while(head_of_bid_ > 0 &&  buy_orders[head_of_bid_].first_order_ == nullptr){

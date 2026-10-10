@@ -62,8 +62,7 @@ namespace Exchange{
                     incoming_request->side_,incoming_request->price_,incoming_request->qty_);
                 return;
             case ClientRequestType::CANCEL:
-                order_book->cancel(incoming_request->clientId_,incoming_request->order_id_,
-                    incoming_request->side_,incoming_request->price_,incoming_request->qty_);
+                order_book->cancel(incoming_request->clientId_,incoming_request->order_id_);
                 return;
             default:
                 FATAL("Received INVALID client request!!");

@@ -2,6 +2,7 @@
 #include "common/types.h"
 #include "common/constants.h"
 #include "common/utils.h"
+#include "common/time-utils.h"
 #include "common/logging.h"
 #include "common/memory-pool.h"
 #include "matching-engine/matcher/me-order.h"
@@ -22,7 +23,7 @@ namespace Exchange{
         MEOrderBook(MatchingEngine *matching_engine, TickerId ticker_id, Logger *logger);
         ~MEOrderBook();
         void add (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
-        void cancel (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
+        void cancel (ClientId client_id, OrderId client_order_id) noexcept;
         private:
         MatchingEngine* matching_engine_;
         //ToDo - Improvement - Benchmark
