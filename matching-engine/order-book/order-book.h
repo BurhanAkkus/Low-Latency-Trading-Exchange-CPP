@@ -5,6 +5,7 @@
 #include "common/time-utils.h"
 #include "common/logging.h"
 #include "common/memory-pool.h"
+#include "common/perf-utils.h"
 #include "matching-engine/matcher/me-order.h"
 #include "matching-engine/order-server/client-response.h"
 #include "matching-engine/market-data/market-update.h"
