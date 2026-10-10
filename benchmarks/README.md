@@ -48,21 +48,23 @@ is heating up: turn turbo off while benchmarking
 
 ### 3. Run
 
-The engine writes `exchange_matching_engine.log` to the **current directory** (tens of MB per
-run), so run it from a scratch directory:
+The engine writes `exchange_matching_engine.log` to the **current directory** (~300 MB with
+the defaults), so run it from a scratch directory:
 
 ```bash
 mkdir -p /tmp/me-bench && cd /tmp/me-bench && rm -f *.log
-<repo>/matching-engine/cmake-build-release/matching_engine_benchmark --requests 20000
+<repo>/matching-engine/cmake-build-release/matching_engine_benchmark
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--requests N` | 100000 | number of requests to send |
-| `--interval-us N` | 500 | time between requests |
+| `--requests N` | 500000 | number of requests to send |
+| `--interval-us N` | 10 | time between requests |
 | `--seed N` | 42 | random seed, same seed = same request stream |
 | `--cancel-pct N` | 25 | % of requests that cancel an earlier order (may already be filled → `CANCEL_REJECTED`) |
-| `--clients N` | 4 | number of clients, each has `ME_MAX_ORDER_PER_CLIENT` order ids |
+| `--clients N` | 16 | number of clients, each has `ME_MAX_ORDER_PER_CLIENT` order ids |
+| `--price-min N` | 1 | lowest NEW order price, prices are uniform in `[min, max]` |
+| `--price-max N` | 256 | highest NEW order price, at most `ME_MAX_PRICE_LEVELS` |
 | `--engine-core N` | 4 | core for the matching engine thread |
 | `--logger-core N` | 6 | core for the engine's logger thread |
 | `--driver-core N` | 8 | core for the benchmark's own thread |
@@ -73,16 +75,23 @@ marks the slower E-cores. The defaults assume an
 i7-14650HX, where CPUs 0-15 are P-cores (siblings 0-1, 2-3, ...) and 16-23 are slower E-cores.
 Keep all three on P-cores, a thread landing on an E-core skews the numbers.
 
-Keep `--interval-us` above the engine's per-request time. If requests arrive faster than the
-engine handles them they queue up, and the logger falls behind and overwrites unread lines.
-100 µs saturates the engine today.
+The default price range is the whole book: a sparse book where price levels are far apart, so
+finding the next best price after a level empties has to skip many empty levels. A narrow
+range such as `--price-min 101 --price-max 110` gives a dense book where levels are adjacent.
+
+Keep `--interval-us` above the engine's per-request time, otherwise requests queue up behind
+each other and the run measures throughput rather than latency. With the defaults the engine's
+p99.9 is ~5 µs, so 10 µs leaves headroom. Below ~2 µs the engine is saturated. A run takes
+`requests × interval` plus a few seconds to set up (5 s + ~2.5 s with the defaults).
+
+Short runs see fewer interrupts and look better at the tail: compare runs of the same length.
 
 ### 4. Analyse
 
 From the directory with the log:
 
 ```bash
-python3 <repo>/scripts/perf-analysis.py --skip-first 2000
+python3 <repo>/scripts/perf-analysis.py --skip-first 50000
 ```
 
 | Option | Meaning |
@@ -116,5 +125,5 @@ numbers as the code's absolute cost.
 
 ```bash
 mkdir -p <repo>/benchmarks/results
-python3 <repo>/scripts/perf-analysis.py --skip-first 2000 > <repo>/benchmarks/results/$(git -C <repo> rev-parse --short HEAD).txt
+python3 <repo>/scripts/perf-analysis.py --skip-first 50000 > <repo>/benchmarks/results/$(git -C <repo> rev-parse --short HEAD).txt
 ```

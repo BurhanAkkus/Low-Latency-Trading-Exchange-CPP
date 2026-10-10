@@ -18,13 +18,18 @@ using namespace Exchange;
 
 namespace {
   struct Config {
-    size_t requests = 100'000;
-    // Keep this above the engine's per request time, otherwise requests queue up and the
-    // logger falls behind (its queue overwrites unread lines). 100us saturates the engine today.
-    Nanos interval_ns = 500 * NANOS_TO_MICROS;
+    size_t requests = 500'000;
+    // Keep this above the engine's per request time, otherwise requests queue up behind each
+    // other. The engine's p99.9 is ~5us today, below ~2us it is saturated.
+    Nanos interval_ns = 10 * NANOS_TO_MICROS;
     unsigned seed = 42;
     unsigned cancel_pct = 25;
-    size_t clients = 4;
+    // Each client has ME_MAX_ORDER_PER_CLIENT order ids, 16 covers the default requests.
+    size_t clients = 16;
+    // NEW order prices are uniform in [price_min, price_max]. The whole book by default: a sparse
+    // book with far apart levels. A narrow range (e.g. 101-110) is a dense book.
+    Price price_min = 1;
+    Price price_max = ME_MAX_PRICE_LEVELS;
     int engine_core = 4;   // P-cores are 0-15, pick different physical cores (0-1, 2-3, ... are siblings).
     int logger_core = 6;
     int driver_core = 8;
@@ -32,8 +37,9 @@ namespace {
 
   auto usage(const char* prog) {
     std::cerr << "usage: " << prog << " [--requests N] [--interval-us N] [--seed N] [--cancel-pct N]\n"
-              << "       [--clients N] [--engine-core N] [--logger-core N] [--driver-core N]\n"
-              << "core -1 leaves the thread unpinned.\n";
+              << "       [--clients N] [--price-min N] [--price-max N]\n"
+              << "       [--engine-core N] [--logger-core N] [--driver-core N]\n"
+              << "prices are in [1, " << ME_MAX_PRICE_LEVELS << "], core -1 leaves the thread unpinned.\n";
     std::exit(EXIT_FAILURE);
   }
 
@@ -48,12 +54,15 @@ namespace {
       else if (!std::strcmp(key, "--seed")) cfg.seed = static_cast<unsigned>(value);
       else if (!std::strcmp(key, "--cancel-pct")) cfg.cancel_pct = static_cast<unsigned>(value);
       else if (!std::strcmp(key, "--clients")) cfg.clients = static_cast<size_t>(value);
+      else if (!std::strcmp(key, "--price-min")) cfg.price_min = static_cast<Price>(value);
+      else if (!std::strcmp(key, "--price-max")) cfg.price_max = static_cast<Price>(value);
       else if (!std::strcmp(key, "--engine-core")) cfg.engine_core = static_cast<int>(value);
       else if (!std::strcmp(key, "--logger-core")) cfg.logger_core = static_cast<int>(value);
       else if (!std::strcmp(key, "--driver-core")) cfg.driver_core = static_cast<int>(value);
       else usage(argv[0]);
     }
     if (cfg.clients == 0 || cfg.clients >= ME_MAX_NUM_CLIENTS || cfg.cancel_pct > 100) usage(argv[0]);
+    if (cfg.price_min < 1 || cfg.price_min > cfg.price_max || cfg.price_max > ME_MAX_PRICE_LEVELS) usage(argv[0]);
     return cfg;
   }
 }
@@ -62,6 +71,7 @@ int main(int argc, char** argv) {
   const auto cfg = parseArgs(argc, argv);
   std::cout << "requests:" << cfg.requests << " interval_us:" << cfg.interval_ns / NANOS_TO_MICROS
             << " seed:" << cfg.seed << " cancel_pct:" << cfg.cancel_pct << " clients:" << cfg.clients
+            << " price:" << cfg.price_min << "-" << cfg.price_max
             << " engine_core:" << cfg.engine_core << " logger_core:" << cfg.logger_core
             << " driver_core:" << cfg.driver_core << std::endl;
 
@@ -92,7 +102,7 @@ int main(int argc, char** argv) {
       const OrderId order_id = next_order_id[client_id]++;
       if (UNLIKELY(order_id >= ME_MAX_ORDER_PER_CLIENT)) FATAL("Out of client order ids, use more --clients.");
       const TickerId ticker_id = rng() % ME_MAX_TICKERS;
-      const Price price = 100 + rng() % 10 + 1;
+      const Price price = cfg.price_min + rng() % (cfg.price_max - cfg.price_min + 1);
       const Qty qty = 1 + rng() % 100;
       const Side side = (rng() % 2) ? Side::BUY : Side::SELL;
       request = {ClientRequestType::NEW, order_id, ticker_id, client_id, price, qty, side};
