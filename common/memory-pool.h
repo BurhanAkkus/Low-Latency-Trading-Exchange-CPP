@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdlib>
 #include <new>
+#include <stack>
 #include <vector>
 #include "macros.h"
 
@@ -12,10 +13,7 @@ namespace Common{
     class MemoryPool final{
         public:
             // All memory allocated and touched up front, nothing is allocated afterwards.
-            MemoryPool():store_(N, T{}), free_(N){
-                // Reversed so the first allocations hand out slots 0, 1, 2, ...
-                for(std::size_t i = 0; i < N; i++) free_[i] = N - 1 - i;
-            }
+            MemoryPool():store_(N, T{}), free_(allIndices()){}
 
             MemoryPool(const MemoryPool&) = delete; // copy constructor can't be called.
             MemoryPool& operator=(const MemoryPool&) = delete; // copy assignment can't be called.
@@ -24,30 +22,37 @@ namespace Common{
 
             template<typename ...Args>
             T* allocate(Args... args) noexcept {
-                ASSERT(free_count_ != 0, "There are no more free slots to allocate!");
-                T* ret = &store_[free_[--free_count_]];
+                ASSERT(!free_.empty(), "There are no more free slots to allocate!");
+                T* ret = &store_[free_.top()];
+                free_.pop();
                 return new(ret) T(args...);// new uses memory passed to it - ret in this case.
             }
             template<typename U>
             T* allocate(std::initializer_list<U> args) noexcept {
-                ASSERT(free_count_ != 0, "There are no more free slots to allocate!");
-                T* ret = &store_[free_[--free_count_]];
+                ASSERT(!free_.empty(), "There are no more free slots to allocate!");
+                T* ret = &store_[free_.top()];
+                free_.pop();
                 return new(ret) T(args);// new uses memory passed to it - ret in this case.
             }
 
             auto deallocate(const T* element) noexcept {
                 const auto element_index = element - store_.data();
                 ASSERT(element_index >= 0 && static_cast<std::size_t>(element_index) < N, "Element doesn't belong to this memory pool!");
-                // More frees than allocations means a double free, it would also write past free_.
-                ASSERT(free_count_ < N, "Deallocated more elements than were allocated!");
-                free_[free_count_++] = static_cast<std::size_t>(element_index);
+                // More frees than allocations means a double free. It would also grow free_
+                // past its capacity, a heap allocation.
+                ASSERT(free_.size() < N, "Deallocated more elements than were allocated!");
+                free_.push(static_cast<std::size_t>(element_index));
             }
         private:
+            // Every slot free. Reversed so the first allocations hand out slots 0, 1, 2, ...
+            static auto allIndices(){
+                std::vector<std::size_t> indices(N);
+                for(std::size_t i = 0; i < N; i++) indices[i] = N - 1 - i;
+                return indices;
+            }
             // On the heap: pools are large (the order pool is ~60 MB).
             std::vector<T> store_;
-            // free_[0, free_count_) are the free slot indices, the top is the next one handed out.
-            std::vector<std::size_t> free_;
-            std::size_t free_count_ = N;
+            std::stack<std::size_t, std::vector<std::size_t>> free_;
     };
 
 }
