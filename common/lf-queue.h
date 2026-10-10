@@ -33,8 +33,9 @@ namespace Common{
             next_to_write_ = (next_to_write_ + 1) % store_.size();
             size_++;
         }
+        
         auto getNextReadTo() const noexcept -> const T*{
-            return (next_to_write_ == next_to_read_)? nullptr : &store_[next_to_read_];
+            return size_.load() ? &store_[next_to_read_] : nullptr;
         }
         auto updateReadIndex() noexcept{
             next_to_read_ = (next_to_read_ + 1) % store_.size();
