@@ -44,10 +44,10 @@ namespace Exchange{
                     incoming_requests_->getNextReadTo();
                 if (LIKELY(me_client_request)) {
                 TTT_MEASURE(T3_MatchingEngine_LFQueue_read, logger_);
-                logger_.log("%:% %() % Processing %\n", __FILE__,
-                        __LINE__, __FUNCTION__,
-                        Common::getCurrentNanos(),
-                        me_client_request->toString());
+                // logger_.log("%:% %() % Processing %\n", __FILE__,
+                //         __LINE__, __FUNCTION__,
+                //         Common::getCurrentNanos(),
+                //         me_client_request->toString());
                 START_MEASURE(Exchange_MatchingEngine_processClientRequest);
                 processClientRequest(me_client_request);
                 END_MEASURE(Exchange_MatchingEngine_processClientRequest, logger_);
@@ -79,18 +79,18 @@ namespace Exchange{
     }
 
     void MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
-        logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
-            __FUNCTION__, Common::getCurrentNanos(),
-            client_response->toString());
+        // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
+        //     __FUNCTION__, Common::getCurrentNanos(),
+        //     client_response->toString());
         auto next_write = outgoing_responses_->getNextWriteTo();
         *next_write = *client_response;
         outgoing_responses_->updateWriteIndex();
         TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
     }
     void MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
-        logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
-            __FUNCTION__, Common::getCurrentNanos(),
-            market_update->toString());
+        // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
+        //     __FUNCTION__, Common::getCurrentNanos(),
+        //     market_update->toString());
         auto next_write = outgoing_market_updates_->getNextWriteTo();
         *next_write = *market_update;
         outgoing_market_updates_->updateWriteIndex();
