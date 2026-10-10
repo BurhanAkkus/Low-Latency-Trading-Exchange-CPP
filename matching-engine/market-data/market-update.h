@@ -38,7 +38,6 @@ namespace Exchange{
         Side side_{Side::INVALID};
         Price price_{Price_INVALID};
         Qty qty_{Qty_INVALID};
-        Priority priority_{Priority_INVALID};
         auto toString() const {
             std::stringstream ss;
             ss << "MEMarketUpdate"
@@ -49,8 +48,7 @@ namespace Exchange{
                 << " side:" << sideToString(side_)
                 << " qty:" << qtyToString(qty_)
                 << " price:" << priceToString(price_)
-                << " priority:" << priorityToString(priority_)
-                << "]";
+                 << "]";
             return ss.str();
         }
     };

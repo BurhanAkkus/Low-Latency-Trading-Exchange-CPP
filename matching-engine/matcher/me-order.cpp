@@ -10,7 +10,6 @@ namespace Exchange {
        << "side:" << sideToString(side_) << " "
        << "price:" << priceToString(price_) << " "
        << "qty:" << qtyToString(qty_) << " "
-       << "prio:" << priorityToString(priority_) << " "
        << "prev:" << orderIdToString(prev_order_ ?
          prev_order_->market_order_id_ :
          OrderId_INVALID) << " "

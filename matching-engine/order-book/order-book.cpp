@@ -11,7 +11,7 @@ namespace Exchange{
         logger_->log("Destroying OrderBook for ticker %s at %s",ticker_id_ , getCurrentTimeStr(&time_str_));
         matching_engine_ = nullptr;
     }
-    void MEOrderBook::add (ClientId client_id, OrderId client_order_id, TickerId ticker_id, Side side, Price price, Qty qty) noexcept{
+    void MEOrderBook::add(ClientId client_id, OrderId client_order_id, TickerId ticker_id, Side side, Price price, Qty qty) noexcept{
         // send accepted ClientResponse
         const auto new_market_order_id = getNextOrderId();
         client_response_ = {ClientResponseType::ACCEPTED,
@@ -56,7 +56,10 @@ namespace Exchange{
             matching_engine_->sendMarketUpdate(&market_update_);
         }
         else{
-            // send current order is filled.
+            client_response_ = {ClientResponseType::FILLED,
+                client_id, ticker_id, client_order_id,
+                new_market_order_id, Side::SELL, price, qty, 0};
+            matching_engine_->sendClientResponse(&client_response_);
         }
     }   
 
@@ -94,6 +97,12 @@ namespace Exchange{
                 leaves_qty};
             matching_engine_->sendMarketUpdate(&market_update_);
         }
+        else{
+            client_response_ = {ClientResponseType::FILLED,
+                client_id, ticker_id, client_order_id,
+                new_market_order_id, Side::BUY, price, qty, 0};
+            matching_engine_->sendClientResponse(&client_response_);
+        }
     }
 
     // ToDo - Optimize
@@ -107,10 +116,18 @@ namespace Exchange{
         while(best_offer && best_offer->price_ <= price && qty){
             if(best_offer->qty_ <= qty){
                 qty -= best_offer->qty_ ;
+                market_update_ = {MarketUpdateType::TRADE,
+                    best_offer->market_order_id_, best_offer->ticker_id_, best_offer->side_,
+                    best_offer->price_, best_offer->qty_};
+                matching_engine_->sendMarketUpdate(&market_update_);
                 best_offer = eraseSellOrder(best_offer);
             }
             else{
                 best_offer->qty_ -= qty;
+                market_update_ = {MarketUpdateType::MODIFY,
+                    best_offer->market_order_id_, best_offer->ticker_id_, Side::SELL,
+                    best_offer->price_, best_offer->qty_};
+                matching_engine_->sendMarketUpdate(&market_update_);
                 return 0;
             }
         }
@@ -121,12 +138,18 @@ namespace Exchange{
         while(best_offer && best_offer->price_ >= price && qty){
             if(best_offer->qty_ <= qty){
                 qty -= best_offer->qty_ ;
-                // best_offer is filled.
-                //matching_engine_->sendClientResponse();
+                market_update_ = {MarketUpdateType::TRADE,
+                    best_offer->market_order_id_, best_offer->ticker_id_, Side::BUY,
+                    best_offer->price_, best_offer->qty_};
+                matching_engine_->sendMarketUpdate(&market_update_);
                 best_offer = eraseBuyOrder(best_offer);
             }
             else{
                 best_offer->qty_ -= qty;
+                market_update_ = {MarketUpdateType::MODIFY,
+                    best_offer->market_order_id_, best_offer->ticker_id_, Side::BUY,
+                    best_offer->price_, best_offer->qty_};
+                matching_engine_->sendMarketUpdate(&market_update_);
                 return 0;
             }
         }
