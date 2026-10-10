@@ -3,14 +3,11 @@
 
 Common::Logger* logger = nullptr;
 Exchange::MatchingEngine* matching_engine = nullptr;
+// Only async-signal-safe work is allowed in a signal handler,
+// so it just raises a flag and main() does the shutdown.
+volatile std::sig_atomic_t shutdown_requested = 0;
 void signal_handler(int) {
-    using namespace std::literals::chrono_literals;
-    // 10s to finish whatever is happening.
-    std::this_thread::sleep_for(10s);
-    delete logger; logger = nullptr;
-    delete matching_engine; matching_engine = nullptr;
-    std::this_thread::sleep_for(10s);
-    exit(EXIT_SUCCESS);
+    shutdown_requested = 1;
 }
 
 int main(int, char **) {
@@ -36,10 +33,15 @@ int main(int, char **) {
             Common::getCurrentTimeStr(&time_str));
     matching_engine->start();
     // Heartbeat
-    while (true) {
+    // usleep returns early when SIGINT arrives, so shutdown is not delayed by the sleep.
+    while (!shutdown_requested) {
         logger->log("%:% %() % Sleeping for a few milliseconds..\n",
              __FILE__, __LINE__, __FUNCTION__,
             Common::getCurrentTimeStr(&time_str));
         usleep(sleep_time * 1000);
     }
+    // Destructor stops the engine thread and joins it before freeing the order books.
+    delete matching_engine; matching_engine = nullptr;
+    delete logger; logger = nullptr;
+    return EXIT_SUCCESS;
 }
