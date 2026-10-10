@@ -29,8 +29,8 @@ namespace Exchange{
         MatchingEngine(const MatchingEngine &&) = delete;
         MatchingEngine &operator=(const MatchingEngine &) = delete;
         MatchingEngine &operator=(const MatchingEngine &&) = delete;
-        void MatchingEngine::run() noexcept;
-        void processClientRequest(const MEClientRequest* incoming_request) const noexcept -> void;
+        void run() noexcept;
+        void processClientRequest(const MEClientRequest* incoming_request) const noexcept;
         void sendClientResponse(const MEClientResponse *client_response) noexcept;
         void sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
     

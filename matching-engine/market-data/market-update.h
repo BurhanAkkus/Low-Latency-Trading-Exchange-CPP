@@ -1,3 +1,4 @@
+#pragma once
 #include "common/constants.h"
 #include "common/types.h"
 #include "common/lf-queue.h"

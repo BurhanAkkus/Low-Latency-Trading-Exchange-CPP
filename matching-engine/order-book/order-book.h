@@ -1,7 +1,12 @@
+#pragma once
 #include "common/types.h"
 #include "common/constants.h"
 #include "common/utils.h"
+#include "common/logging.h"
+#include "common/memory-pool.h"
 #include "matcher/me-order.h"
+#include "order-server/client-response.h"
+#include "market-data/market-update.h"
 #include <array>
 using namespace Common;
 
@@ -14,7 +19,7 @@ namespace Exchange{
         MEOrderBook(const MEOrderBook &&) = delete;
         MEOrderBook &operator=(const MEOrderBook &) = delete;
         MEOrderBook &operator=(const MEOrderBook &&) = delete;
-        MEOrderBook(TickerId ticker_id, Logger *logger, MatchingEngine *matching_engine);
+        MEOrderBook(MatchingEngine *matching_engine, TickerId ticker_id, Logger *logger);
         ~MEOrderBook();
         private:
         MatchingEngine* matching_engine_;
@@ -22,31 +27,44 @@ namespace Exchange{
         // Single array of orders. 
         // hold the crossover.
         // Preserve the invariant head of bid < head of ask.
-        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> sellOrders;
-        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> buyOrders;
-        int head_of_bid_ = -1;
-        int head_of_ask_ = ME_MAX_PRICE_LEVELS;
-        std::array<OrderHashMap,ME_MAX_NUM_CLIENTS> client_orders_;
+        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> sell_orders;
+        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> buy_orders;
+        uint64_t head_of_bid_ = ME_MAX_PRICE_LEVELS;
+        uint64_t head_of_ask_ = ME_MAX_PRICE_LEVELS;
+        std::array<std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>,ME_MAX_NUM_CLIENTS> client_orders_{};
         MemoryPool<MEOrder> order_memory_pool_{ME_MAX_ORDER_IDS};
         TickerId ticker_id_;
-        OrderId next_market_order_id_;
+        OrderId next_market_order_id_ = 0;
         MEClientResponse client_response_;
         MEMarketUpdate market_update_;
         Logger* logger_ = nullptr;
         std::string time_str_;
 
-        auto getNextOrderId() noexcept -> OrderId{
+        inline auto getNextOrderId() noexcept -> OrderId{
             return next_market_order_id_++;
         }
         //ToDo
         // price has to be validated before here.
-        auto getSellOrdersAtPrice(Price price) noexcept->MEOrdersAtPrice*{
-            return &sellOrders[price];
+        inline auto getSellOrdersAtPrice(Price price) noexcept->MEOrdersAtPrice*{
+            return &sell_orders[price];
         }
-        auto getBuyOrdersAtPrice(Price price) noexcept ->MEOrdersAtPrice*{
-            return &buyOrders[price];
+        inline auto getBuyOrdersAtPrice(Price price) noexcept ->MEOrdersAtPrice*{
+            return &buy_orders[price];
         }
-        void MEOrderBook::add (ClientId client_id, OrderId client_order_id, TickerId ticker_id, Side side, Price price, Qty qty) noexcept;
-    
+        inline auto getBestSellOrder(){
+            return head_of_ask_ < ME_MAX_PRICE_LEVELS? getSellOrdersAtPrice(head_of_ask_)->first_order_ : nullptr;
+        }
+        inline auto getBestBuyOrder(){
+            return head_of_bid_ < ME_MAX_PRICE_LEVELS ? getBuyOrdersAtPrice(head_of_bid_)->first_order_ : nullptr;
+        }
+        void add (ClientId client_id, OrderId client_order_id, TickerId ticker_id, Side side, Price price, Qty qty) noexcept;
+        void addSellOrder(ClientId client_id, OrderId client_order_id, TickerId ticker_id,  Price price, Qty qty, OrderId new_market_order_id) noexcept;
+        void addBuyOrder(ClientId client_id, OrderId client_order_id, TickerId ticker_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
+        MEOrder* eraseSellOrder(MEOrder* order) noexcept ;
+        MEOrder* eraseBuyOrder(MEOrder* order) noexcept ;
+        inline void findNextSellHead()noexcept;
+        inline void findNextBuyHead()noexcept;
+        Qty remainingFromMatchingSell(Price price, Qty qty) noexcept;
+        Qty remainingFromMatchingBuy(Price price, Qty qty) noexcept;
     };
 }
