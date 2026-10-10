@@ -11,7 +11,7 @@ namespace Exchange{
     enum class ClientResponseType:uint8_t{
         INVALID = 0,
         ACCEPTED = 1,
-        CANCELLED = 2,
+        CANCELED = 2,
         FILLED = 3,
         CANCEL_REJECTED = 4,
         REJECTED = 5
@@ -22,7 +22,7 @@ namespace Exchange{
                 return "INVALID";
             case ClientResponseType::ACCEPTED:
                 return "ACCEPTED";
-            case ClientResponseType::CANCELLED:
+            case ClientResponseType::CANCELED:
                 return "CANCELLED";
             case ClientResponseType::FILLED:
                 return "FILLED";

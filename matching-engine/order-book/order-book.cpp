@@ -189,7 +189,7 @@ namespace Exchange{
             matching_engine_->sendClientResponse(&client_response_);
             return;
         }
-        client_response_ = {ClientResponseType::CANCELLED,
+        client_response_ = {ClientResponseType::CANCELED,
             order->client_id_, ticker_id_, order->client_order_id_,
             order ->market_order_id_ , order->side_, order->price_, 0, 0};
         matching_engine_->sendClientResponse(&client_response_);

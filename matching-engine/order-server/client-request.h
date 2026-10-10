@@ -30,8 +30,8 @@ namespace Exchange{
     struct MEClientRequest{
         ClientRequestType type_ = ClientRequestType::INVALID;
         OrderId order_id_ = OrderId_INVALID;
-        TickerId tickerId_ = TickerId_INVALID;
-        ClientId clientId_ = ClientId_INVALID;
+        TickerId ticker_id_ = TickerId_INVALID;
+        ClientId client_id_ = ClientId_INVALID;
         Price price_ = Price_INVALID;
         Qty qty_ = Qty_INVALID;
         Side side_ = Side::INVALID;
@@ -41,8 +41,8 @@ namespace Exchange{
             ss << "[";
             ss << "type: " << clientREquestTypeToString(type_);
             ss << " orderId: " << orderIdToString(order_id_);
-            ss << " tickerId: " << tickerIdToString(tickerId_);
-            ss << " clientId: " << clientIdToString(clientId_);
+            ss << " tickerId: " << tickerIdToString(ticker_id_);
+            ss << " clientId: " << clientIdToString(client_id_);
             ss << " price: " << priceToString(price_);
             ss << " quantity: " << qtyToString(qty_);
             ss << " side: " << sideToString(side_);
