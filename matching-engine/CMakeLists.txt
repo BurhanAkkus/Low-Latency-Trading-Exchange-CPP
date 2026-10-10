@@ -4,6 +4,10 @@ project(LowLatencyApp CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Default to an optimized build (-O3 -DNDEBUG) so benchmarks are comparable.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -Wpedantic")
 set(CMAKE_VERBOSE_MAKEFILE on)
 
@@ -18,8 +22,12 @@ target_include_directories(libcommon PUBLIC ${REPO_ROOT})
 
 add_library(libexchange STATIC
     matcher/matching-engine.cpp
-    matcher/me-order.cpp)
+    matcher/me-order.cpp
+    order-book/order-book.cpp)
 target_link_libraries(libexchange PUBLIC libcommon)
 
 add_executable(exchange_main matching-engine-main.cpp)
 target_link_libraries(exchange_main PRIVATE libexchange pthread)
+
+add_executable(matching_engine_benchmark ${REPO_ROOT}/benchmarks/matching-engine-benchmark.cpp)
+target_link_libraries(matching_engine_benchmark PRIVATE libexchange pthread)

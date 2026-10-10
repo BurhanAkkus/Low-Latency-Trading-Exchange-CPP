@@ -14,6 +14,7 @@ TTT hops:   for every event of the later tag, latency = its timestamp minus the 
 Usage:
     python3 scripts/perf-analysis.py                        # exchange*.log in the current dir
     python3 scripts/perf-analysis.py path/to/*.log --tsc-ghz 2.4192
+    python3 scripts/perf-analysis.py --skip-first 10000     # ignore warm-up requests
 """
 import argparse
 import glob
@@ -39,6 +40,9 @@ HOPS = [
 ]
 
 PERCENTILES = (50, 90, 99, 99.9)
+
+# Tags that mark one incoming request, earliest first. Used by --skip-first to count requests.
+REQUEST_TAGS = ("T1_OrderServer_TCP_read", "T3_MatchingEngine_LFQueue_read")
 
 
 def detect_tsc_ghz():
@@ -83,6 +87,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("logs", nargs="*", help="log files (default: exchange*.log)")
     ap.add_argument("--tsc-ghz", type=float, help="TSC frequency in GHz (default: read from kernel log)")
+    ap.add_argument("--skip-first", type=int, default=0, metavar="N",
+                    help="ignore measurements logged before the (N+1)th request (warm-up: cold caches, "
+                         "first-touch page faults, empty book)")
     args = ap.parse_args()
 
     files = args.logs or sorted(glob.glob("exchange*.log"))
@@ -93,7 +100,7 @@ def main():
     if not tsc_ghz:
         sys.exit("could not detect TSC frequency, pass --tsc-ghz")
 
-    rdtsc = defaultdict(list)  # tag -> [ns]
+    rdtsc = defaultdict(list)  # tag -> [(line epoch ns, ns)]
     ttt = defaultdict(list)    # tag -> [epoch ns]
     for path in files:
         with open(path, errors="replace") as f:
@@ -102,16 +109,31 @@ def main():
                 if len(tokens) != 4 or tokens[1] not in ("RDTSC", "TTT"):
                     continue
                 try:
+                    line_time = int(tokens[0])
                     value = int(tokens[3])
                 except ValueError:
                     continue
                 if tokens[1] == "RDTSC":
-                    rdtsc[tokens[2]].append(value / tsc_ghz)
+                    rdtsc[tokens[2]].append((line_time, value / tsc_ghz))
                 else:
                     ttt[tokens[2]].append(value)
 
     print(f"files: {', '.join(files)}")
     print(f"TSC: {tsc_ghz:.4f} GHz")
+
+    # Warm-up: count requests by the earliest hop present, drop everything logged before the (N+1)th.
+    if args.skip_first:
+        request_tag = next((t for t in REQUEST_TAGS if ttt.get(t)), None)
+        if not request_tag:
+            sys.exit("--skip-first needs one of " + ", ".join(REQUEST_TAGS) + " in the logs")
+        starts = sorted(ttt[request_tag])
+        if args.skip_first >= len(starts):
+            sys.exit(f"--skip-first {args.skip_first} skips all {len(starts)} requests")
+        cutoff = starts[args.skip_first]
+        rdtsc = {tag: [x for x in v if x[0] >= cutoff] for tag, v in rdtsc.items()}
+        ttt = {tag: [t for t in v if t >= cutoff] for tag, v in ttt.items()}
+        print(f"skipped first {args.skip_first} of {len(starts)} requests ({request_tag})")
+    rdtsc = {tag: [ns for _, ns in v] for tag, v in rdtsc.items() if v}
 
     if rdtsc:
         print_table("Code blocks (RDTSC)", [(tag, summarize(v)) for tag, v in sorted(rdtsc.items())])
