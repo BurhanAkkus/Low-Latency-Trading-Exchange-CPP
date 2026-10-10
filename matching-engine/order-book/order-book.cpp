@@ -1,5 +1,5 @@
 #include "order-book.h"
-#include "matcher/matching-engine.h"
+#include "matching-engine/matcher/matching-engine.h"
 using namespace Common;
 
 namespace Exchange{
@@ -8,11 +8,18 @@ namespace Exchange{
         ticker_id_(ticker_id),
         logger_(logger) {};
     MEOrderBook::~MEOrderBook(){
-        logger_->log("Destroying OrderBook for ticker %s at %s",ticker_id_ , getCurrentTimeStr(&time_str_));
+        logger_->log("Destroying OrderBook for ticker % at %",ticker_id_ , getCurrentTimeStr(&time_str_));
         matching_engine_ = nullptr;
     }
     void MEOrderBook::add(ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept{
         // send accepted ClientResponse
+        if(client_orders_[client_id][client_order_id] != nullptr){
+            client_response_ = {ClientResponseType::CANCELLED,
+                client_id, ticker_id_, client_order_id,
+                OrderId_INVALID, side, price, 0, qty};
+            matching_engine_->sendClientResponse(&client_response_);
+            return;
+        }
         const auto new_market_order_id = getNextOrderId();
         client_response_ = {ClientResponseType::ACCEPTED,
             client_id, ticker_id_, client_order_id,
@@ -78,11 +85,8 @@ namespace Exchange{
                 order->next_order_ = order->prev_order_ = order;
                 level.first_order_ = order;
             }
-            // update heads
-            //ToDo
-            // extra conditional to check if book is empty.. 
-            // should be similar to sell side, the empty bid should be minimum valid price - 1.
-            if (head_of_bid_ == ME_MAX_PRICE_LEVELS || price > head_of_bid_) head_of_bid_ = price;
+            //update head
+            if (price > head_of_bid_) head_of_bid_ = price;
             // update client Orders;
             client_orders_[client_id][client_order_id] = order;
             // send market update.
@@ -231,16 +235,16 @@ namespace Exchange{
 
     inline void MEOrderBook::findNextSellHead() noexcept {
         head_of_ask_++;
-        while(head_of_ask_ < ME_MAX_PRICE_LEVELS &&  sell_orders[head_of_ask_].first_order_ == nullptr ){
+        while(head_of_ask_ <= ME_MAX_PRICE_LEVELS &&  sell_orders[head_of_ask_].first_order_ == nullptr ){
             head_of_ask_++;
         }
     }
     // ToDo
     // head of bid should be < minimum valid price when empty. 
     inline void MEOrderBook::findNextBuyHead() noexcept {
-        head_of_bid_ =  std::min(head_of_bid_ - 1 , ME_MAX_PRICE_LEVELS);
-        while(head_of_bid_ < ME_MAX_PRICE_LEVELS && buy_orders[head_of_bid_].first_order_ == nullptr){
-            head_of_bid_ =  std::min(head_of_bid_ - 1 , ME_MAX_PRICE_LEVELS);
+        head_of_bid_ --;
+        while(head_of_bid_ > 0 &&  buy_orders[head_of_bid_].first_order_ == nullptr){
+            head_of_bid_--;
         }
     }
 }

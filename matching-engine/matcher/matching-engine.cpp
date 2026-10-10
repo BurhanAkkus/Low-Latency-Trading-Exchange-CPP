@@ -10,18 +10,20 @@ namespace Exchange{
             outgoing_responses_{client_responses},
             outgoing_market_updates_{market_updates},
             logger_{"exchange_matching_engine.log"}{
-                // for(auto i = 0; i < ticker_order_book_.size(); i++){
-                //     ticker_order_book_[i] = new MEOrderBook(i,&logger_,this);
-                // }
+                //ToDo
+                // should initialize in consecutive memory chunk.
+                 for(uint64_t i = 0; i < ticker_order_book_.size(); i++){
+                    ticker_order_book_[i] = new MEOrderBook{this,i,&logger_};
+                 }
             };
     MatchingEngine::~MatchingEngine(){
+        run_ = false;
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(1s);
-        // for(auto& order_book : ticker_order_book_) {
-        //     delete order_book;
-        //     order_book = nullptr;
-        // }
-        run_ = false;
+        for(auto& order_book : ticker_order_book_) {
+            delete order_book;
+            order_book = nullptr;
+        }
         incoming_requests_ = nullptr;
         outgoing_responses_ = nullptr;
         outgoing_market_updates_ = nullptr;
@@ -52,14 +54,16 @@ namespace Exchange{
             }
         }
 
-    auto MatchingEngine::processClientRequest(const MEClientRequest* incoming_request) const noexcept -> void{
-        auto order_book = ticker_order_book_[incoming_request->tickerId_];
+    auto MatchingEngine::processClientRequest(const MEClientRequest* incoming_request) noexcept -> void{
+        auto& order_book = ticker_order_book_[incoming_request->tickerId_];
         switch(incoming_request->type_){
             case ClientRequestType::NEW:
-                order_book -> add(incoming_request);
+                order_book->add(incoming_request->clientId_,incoming_request->order_id_,
+                    incoming_request->side_,incoming_request->price_,incoming_request->qty_);
                 return;
             case ClientRequestType::CANCEL:
-                order_book -> cancel(incoming_request);
+                order_book->cancel(incoming_request->clientId_,incoming_request->order_id_,
+                    incoming_request->side_,incoming_request->price_,incoming_request->qty_);
                 return;
             default:
                 FATAL("Received INVALID client request!!");
@@ -67,15 +71,15 @@ namespace Exchange{
         }
     }
 
-    auto MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
+    void MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
         logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
             __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
             client_response->toString());
         auto next_write = outgoing_responses_->getNextWriteTo();
-        *next_write = std::move(*client_response);
+        *next_write = *client_response;
         outgoing_responses_->updateWriteIndex();
     }   
-    auto MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
+    void MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
         logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
             __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
             market_update->toString());

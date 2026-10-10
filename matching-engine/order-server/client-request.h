@@ -24,11 +24,12 @@ namespace Exchange{
             case ClientRequestType::CANCEL:
                 return "CANCEL";
         }
+        return "UNKNOWN";
     }
 
     struct MEClientRequest{
         ClientRequestType type_ = ClientRequestType::INVALID;
-        OrderId orderId_ = OrderId_INVALID;
+        OrderId order_id_ = OrderId_INVALID;
         TickerId tickerId_ = TickerId_INVALID;
         ClientId clientId_ = ClientId_INVALID;
         Price price_ = Price_INVALID;
@@ -39,7 +40,7 @@ namespace Exchange{
             ss << "MEClientRequest";
             ss << "[";
             ss << "type: " << clientREquestTypeToString(type_);
-            ss << " orderId: " << orderIdToString(orderId_);
+            ss << " orderId: " << orderIdToString(order_id_);
             ss << " tickerId: " << tickerIdToString(tickerId_);
             ss << " clientId: " << clientIdToString(clientId_);
             ss << " price: " << priceToString(price_);

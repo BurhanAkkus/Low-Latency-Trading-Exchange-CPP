@@ -30,7 +30,7 @@ namespace Exchange{
         MatchingEngine &operator=(const MatchingEngine &) = delete;
         MatchingEngine &operator=(const MatchingEngine &&) = delete;
         void run() noexcept;
-        void processClientRequest(const MEClientRequest* incoming_request) const noexcept;
+        void processClientRequest(const MEClientRequest* incoming_request) noexcept;
         void sendClientResponse(const MEClientResponse *client_response) noexcept;
         void sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
     
@@ -40,10 +40,10 @@ namespace Exchange{
         ClientRequestLFQueue* incoming_requests_ = nullptr;
         ClientResponseLFQueue* outgoing_responses_ = nullptr;
         MEMarketUpdateLFQueue* outgoing_market_updates_ = nullptr;
-        volatile bool run_ = false;
+        std::atomic_bool run_ = false;
         Logger logger_;
         std::string time_str_;
-        std::array<MEOrderBook,ME_MAX_TICKERS> ticker_order_book_;
+        std::array<MEOrderBook*,ME_MAX_TICKERS> ticker_order_book_;
         
     };
 

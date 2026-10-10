@@ -26,7 +26,7 @@ int main(int, char **) {
 
     //ToDo
     // engine owns the queues so main can exit.
-    matching_engine = &Exchange::MatchingEngine{
+    matching_engine = new Exchange::MatchingEngine{
         &client_requests,
         &client_responses,
         &market_updates};

@@ -4,8 +4,8 @@
 #include "common/utils.h"
 #include "common/logging.h"
 #include "common/memory-pool.h"
-#include "matcher/me-order.h"
-#include "order-server/client-response.h"
+#include "matching-engine/matcher/me-order.h"
+#include "matching-engine/order-server/client-response.h"
 #include "market-data/market-update.h"
 #include <array>
 using namespace Common;
@@ -21,16 +21,19 @@ namespace Exchange{
         MEOrderBook &operator=(const MEOrderBook &&) = delete;
         MEOrderBook(MatchingEngine *matching_engine, TickerId ticker_id, Logger *logger);
         ~MEOrderBook();
+        void add (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
+        void cancel (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
         private:
         MatchingEngine* matching_engine_;
         //ToDo - Improvement - Benchmark
         // Single array of orders. 
         // hold the crossover.
         // Preserve the invariant head of bid < head of ask.
-        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> sell_orders;
-        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS> buy_orders;
-        uint64_t head_of_bid_ = ME_MAX_PRICE_LEVELS;
-        uint64_t head_of_ask_ = ME_MAX_PRICE_LEVELS;
+        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS + 1> sell_orders;
+        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS + 1> buy_orders;
+        // Valid price range is [1, ME_MAX_PRICE_LEVELS]
+        uint64_t head_of_bid_ = 0;
+        uint64_t head_of_ask_ = ME_MAX_PRICE_LEVELS + 1;
         std::array<std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>,ME_MAX_NUM_CLIENTS> client_orders_{};
         MemoryPool<MEOrder> order_memory_pool_{ME_MAX_ORDER_IDS};
         TickerId ticker_id_;
@@ -57,7 +60,6 @@ namespace Exchange{
         inline auto getBestBuyOrder(){
             return head_of_bid_ < ME_MAX_PRICE_LEVELS ? getBuyOrdersAtPrice(head_of_bid_)->first_order_ : nullptr;
         }
-        void add (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
         void addSellOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
         void addBuyOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
         MEOrder* eraseSellOrder(MEOrder* order) noexcept ;
