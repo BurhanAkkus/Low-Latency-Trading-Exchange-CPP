@@ -17,7 +17,9 @@ std::ostream& operator<<(std::ostream& os, const MyStruct& ms){
     return os;
 }
 
-auto ProducerFunction(LFQueue<MyStruct>* q){
+using MyQueue = LFQueue<MyStruct, 32>; // capacity must be a power of two.
+
+auto ProducerFunction(MyQueue* q){
     for(int i = 0; i < 20; i++){
         auto w = q->getNextWriteTo();
         q->updateWriteIndex();
@@ -28,7 +30,7 @@ auto ProducerFunction(LFQueue<MyStruct>* q){
     }
 }   
 
-auto ConsumerFunction(LFQueue<MyStruct>* q){
+auto ConsumerFunction(MyQueue* q){
     for(int i = 0; i < 20; i++){
         auto r = q->getNextReadTo();
         q->updateReadIndex();
@@ -39,7 +41,7 @@ auto ConsumerFunction(LFQueue<MyStruct>* q){
 }
 
 int main(){
-    LFQueue<MyStruct> q{20};
+    MyQueue q;
     auto writeThread = createAndStartThread(1,"ProduceThread", ProducerFunction,&q);
     auto readThread = createAndStartThread(2,"ConsumeThread", ConsumerFunction,&q);
     writeThread->join();

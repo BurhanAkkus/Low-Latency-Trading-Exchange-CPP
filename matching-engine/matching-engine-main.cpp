@@ -14,12 +14,9 @@ int main(int, char **) {
     logger = new Common::Logger("exchange_main.log");
     std::signal(SIGINT, signal_handler);
     const int sleep_time = 100 * 1000;
-    Exchange::ClientRequestLFQueue
-    client_requests(ME_MAX_CLIENT_UPDATES);
-    Exchange::ClientResponseLFQueue
-    client_responses(ME_MAX_CLIENT_UPDATES);
-    Exchange::MEMarketUpdateLFQueue
-    market_updates(ME_MAX_MARKET_UPDATES);
+    Exchange::ClientRequestLFQueue client_requests;
+    Exchange::ClientResponseLFQueue client_responses;
+    Exchange::MEMarketUpdateLFQueue market_updates;
 
     //ToDo
     // engine owns the queues so main can exit.

@@ -54,5 +54,5 @@ namespace Exchange{
     };
 
 #pragma pack(pop)
-using MEMarketUpdateLFQueue = LFQueue<MEMarketUpdate>;
+using MEMarketUpdateLFQueue = LFQueue<MEMarketUpdate, ME_MAX_MARKET_UPDATES>;
 }

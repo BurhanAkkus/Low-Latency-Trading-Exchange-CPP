@@ -51,5 +51,5 @@ namespace Exchange{
         }
     };
 #pragma pack(pop)
-using ClientRequestLFQueue = LFQueue<MEClientRequest>;
+using ClientRequestLFQueue = LFQueue<MEClientRequest, ME_MAX_CLIENT_UPDATES>;
 }

@@ -68,9 +68,9 @@ int main(int argc, char** argv) {
   if (cfg.driver_core >= 0)
     ASSERT(setThreadCore(cfg.driver_core), "Failed to pin driver to core " + std::to_string(cfg.driver_core));
 
-  ClientRequestLFQueue requests(ME_MAX_CLIENT_UPDATES);
-  ClientResponseLFQueue responses(ME_MAX_CLIENT_UPDATES);
-  MEMarketUpdateLFQueue updates(ME_MAX_MARKET_UPDATES);
+  ClientRequestLFQueue requests;
+  ClientResponseLFQueue responses;
+  MEMarketUpdateLFQueue updates;
   auto matching_engine = new MatchingEngine(&requests, &responses, &updates, cfg.logger_core);
   matching_engine->start(cfg.engine_core);
 
