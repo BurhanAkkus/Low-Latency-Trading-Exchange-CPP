@@ -6,7 +6,7 @@
 #include "common/memory-pool.h"
 #include "matching-engine/matcher/me-order.h"
 #include "matching-engine/order-server/client-response.h"
-#include "market-data/market-update.h"
+#include "matching-engine/market-data/market-update.h"
 #include <array>
 using namespace Common;
 
@@ -55,10 +55,10 @@ namespace Exchange{
             return &buy_orders[price];
         }
         inline auto getBestSellOrder(){
-            return head_of_ask_ < ME_MAX_PRICE_LEVELS? getSellOrdersAtPrice(head_of_ask_)->first_order_ : nullptr;
+            return head_of_ask_ <= ME_MAX_PRICE_LEVELS? getSellOrdersAtPrice(head_of_ask_)->first_order_ : nullptr;
         }
         inline auto getBestBuyOrder(){
-            return head_of_bid_ < ME_MAX_PRICE_LEVELS ? getBuyOrdersAtPrice(head_of_bid_)->first_order_ : nullptr;
+            return head_of_bid_ > 0? getBuyOrdersAtPrice(head_of_bid_)->first_order_ : nullptr;
         }
         void addSellOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
         void addBuyOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;

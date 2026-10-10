@@ -14,7 +14,7 @@ namespace Exchange{
     void MEOrderBook::add(ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept{
         // send accepted ClientResponse
         if(client_orders_[client_id][client_order_id] != nullptr){
-            client_response_ = {ClientResponseType::CANCELLED,
+            client_response_ = {ClientResponseType::REJECTED,
                 client_id, ticker_id_, client_order_id,
                 OrderId_INVALID, side, price, 0, qty};
             matching_engine_->sendClientResponse(&client_response_);
@@ -239,8 +239,7 @@ namespace Exchange{
             head_of_ask_++;
         }
     }
-    // ToDo
-    // head of bid should be < minimum valid price when empty. 
+    
     inline void MEOrderBook::findNextBuyHead() noexcept {
         head_of_bid_ --;
         while(head_of_bid_ > 0 &&  buy_orders[head_of_bid_].first_order_ == nullptr){

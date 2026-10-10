@@ -13,7 +13,8 @@ namespace Exchange{
         ACCEPTED = 1,
         CANCELLED = 2,
         FILLED = 3,
-        CANCEL_REJECTED = 4
+        CANCEL_REJECTED = 4,
+        REJECTED = 5
     };
     inline std::string clientResponseTypeToString(ClientResponseType clientResponseType) noexcept{
         switch(clientResponseType){
@@ -27,6 +28,8 @@ namespace Exchange{
                 return "FILLED";
             case ClientResponseType::CANCEL_REJECTED:
                 return "CANCEL_REJECTED";
+            case ClientResponseType::REJECTED:
+                return "REJECTED";
         }
         return "UNKNOWN";
     }
