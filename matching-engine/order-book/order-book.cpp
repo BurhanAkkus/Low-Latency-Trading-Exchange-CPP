@@ -182,15 +182,13 @@ namespace Exchange{
 
     void MEOrderBook::cancel(ClientId client_id, OrderId client_order_id) noexcept{
         auto order = client_orders_[client_id][client_order_id];
-        //ToDo - validation
-        // assume always valid input.
-        // if(UNLIKELY(order == nullptr)){
-        //     client_response_ = {ClientResponseType::CANCEL_REJECTED,
-        //         client_id, ticker_id_,client_order_id,
-        //         OrderId_INVALID , Side::INVALID, Price_INVALID, Qty_INVALID, Qty_INVALID};
-        //     matching_engine_->sendClientResponse(&client_response_);
-        //     return;
-        // }
+        if(UNLIKELY(order == nullptr)){
+            client_response_ = {ClientResponseType::CANCEL_REJECTED,
+                client_id, ticker_id_,client_order_id,
+                OrderId_INVALID , Side::INVALID, Price_INVALID, Qty_INVALID, Qty_INVALID};
+            matching_engine_->sendClientResponse(&client_response_);
+            return;
+        }
         client_response_ = {ClientResponseType::CANCELLED,
             order->client_id_, ticker_id_, order->client_order_id_,
             order ->market_order_id_ , order->side_, order->price_, 0, 0};
