@@ -77,7 +77,7 @@ namespace Common{
                 }
                 logger_.log("%:% %() % EPOLLIN socket:%\n",
                     __FILE__, __LINE__, __FUNCTION__,
-                    Common::getCurrentTimeStr(&time_str_), 
+                    Common::getCurrentNanos(), 
                     socket->fd_);
                 // add to receive sockets
                 if(std::find(receive_sockets_.begin(),receive_sockets_.end(), socket) == receive_sockets_.end())
@@ -87,7 +87,7 @@ namespace Common{
             if(event.events & EPOLLOUT){
                 logger_.log("%:% %() % EPOLLOUT socket:%\n",
                     __FILE__, __LINE__, __FUNCTION__,
-                    Common::getCurrentTimeStr(&time_str_), 
+                    Common::getCurrentNanos(), 
                     socket->fd_);
                 // add to send sockets
                 if(std::find(send_sockets_.begin(),send_sockets_.end(), socket) == send_sockets_.end())

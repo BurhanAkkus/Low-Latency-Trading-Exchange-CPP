@@ -18,7 +18,7 @@ namespace Common {
       rx_time) noexcept {
       logger_.log("%:% %() % TCPServer::defaultRecvCallback() socket:% len:% rx:%\n",
          __FILE__, __LINE__, __FUNCTION__,
-            Common::getCurrentTimeStr(&time_str_), socket->
+            Common::getCurrentNanos(), socket->
               fd_, socket->next_rcv_valid_index_, rx_time);
     }
     inline auto defaultRecvFinishedCallback() noexcept {

@@ -68,7 +68,7 @@ namespace Common {
             const auto user_time = getCurrentNanos();
             logger_.log("%:% %() % read socket:% len:% utime:% ktime:% diff:%\n",
                 __FILE__, __LINE__,__FUNCTION__,
-                Common::getCurrentTimeStr(&time_str_),
+                Common::getCurrentNanos(),
                 fd_, next_rcv_valid_index_, user_time,
                 kernel_time, (user_time - kernel_time));
             recv_callback_(this, kernel_time);
@@ -102,7 +102,7 @@ namespace Common {
             }
             logger_.log("%:% %() % send socket:% len:%\n",
                 __FILE__, __LINE__, __FUNCTION__,
-                Common::getCurrentTimeStr(&time_str_), fd_, n);
+                Common::getCurrentNanos(), fd_, n);
             // remaining bytes to send after n bytes are sent.
             n_send -= n;
             ASSERT(n == n_send_this_msg, "Don't support partial send lengths yet.");
