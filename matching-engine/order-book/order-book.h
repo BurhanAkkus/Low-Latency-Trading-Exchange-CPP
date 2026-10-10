@@ -57,14 +57,14 @@ namespace Exchange{
         inline auto getBestBuyOrder(){
             return head_of_bid_ < ME_MAX_PRICE_LEVELS ? getBuyOrdersAtPrice(head_of_bid_)->first_order_ : nullptr;
         }
-        void add (ClientId client_id, OrderId client_order_id, TickerId ticker_id, Side side, Price price, Qty qty) noexcept;
-        void addSellOrder(ClientId client_id, OrderId client_order_id, TickerId ticker_id,  Price price, Qty qty, OrderId new_market_order_id) noexcept;
-        void addBuyOrder(ClientId client_id, OrderId client_order_id, TickerId ticker_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
+        void add (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
+        void addSellOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
+        void addBuyOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
         MEOrder* eraseSellOrder(MEOrder* order) noexcept ;
         MEOrder* eraseBuyOrder(MEOrder* order) noexcept ;
         inline void findNextSellHead()noexcept;
         inline void findNextBuyHead()noexcept;
-        Qty remainingFromMatchingSell(Price price, Qty qty) noexcept;
-        Qty remainingFromMatchingBuy(Price price, Qty qty) noexcept;
+        Qty remainingFromMatchingBuy(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept;
+        Qty remainingFromMatchingSell(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept;
     };
 }
