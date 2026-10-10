@@ -3,6 +3,7 @@
 #include "common/constants.h"
 #include "common/logging.h"
 #include "common/time-utils.h"
+#include "common/perf-utils.h"
 #include "common/thread-utils.h"
 #include "common/lf-queue.h"
 #include "matching-engine/market-data/market-update.h"
