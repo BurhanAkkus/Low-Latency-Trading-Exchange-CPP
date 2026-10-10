@@ -124,10 +124,11 @@ namespace Common{
         }
         public:
         // explicit to block unwanted conversions.
-        explicit Logger(const std::string& filename): file_name_{filename},log_q_{LOG_QUEUE_SIZE}{
+        // core_id pins the logger thread to a core, -1 leaves it to the OS.
+        explicit Logger(const std::string& filename, int core_id = -1): file_name_{filename},log_q_{LOG_QUEUE_SIZE}{
             os_.open(file_name_);
             ASSERT(os_.is_open(), "Log File " + file_name_ +  " couldn't be opened!");
-            logger_thread_ = createAndStartThread(-1,"CommonLogger", [this](){flushQueue();});
+            logger_thread_ = createAndStartThread(core_id,"CommonLogger", [this](){flushQueue();});
             ASSERT(logger_thread_ != nullptr, "Logger thread couldn't start!");
         }
 
