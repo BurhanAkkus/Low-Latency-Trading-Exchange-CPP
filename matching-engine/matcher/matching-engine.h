@@ -36,6 +36,7 @@ namespace Exchange{
         void processClientRequest(const MEClientRequest* incoming_request) noexcept;
         void sendClientResponse(const MEClientResponse *client_response) noexcept;
         void sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
+        void publishOutputs() noexcept;
     
         private:
         //ToDo
@@ -48,7 +49,8 @@ namespace Exchange{
         std::string time_str_;
         std::thread* thread_ = nullptr;
         std::array<MEOrderBook*,ME_MAX_TICKERS> ticker_order_book_;
-        
+        size_t pending_client_responses_{0};
+        size_t pending_market_updates_{0};
     };
 
 

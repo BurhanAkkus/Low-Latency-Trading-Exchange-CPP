@@ -50,11 +50,19 @@ namespace Exchange{
                 //         me_client_request->toString());
                 START_MEASURE(Exchange_MatchingEngine_processClientRequest);
                 processClientRequest(me_client_request);
+                publishOutputs();
                 END_MEASURE(Exchange_MatchingEngine_processClientRequest, logger_);
                 incoming_requests_->updateReadIndex();
                 }
             }
         }
+
+    void MatchingEngine::publishOutputs() noexcept{
+        outgoing_responses_->updateWriteIndex(pending_client_responses_);
+        pending_client_responses_ = 0;
+        outgoing_market_updates_->updateWriteIndex(pending_market_updates_);
+        pending_market_updates_ = 0;
+    }
 
     auto MatchingEngine::processClientRequest(const MEClientRequest* incoming_request) noexcept -> void{
         auto& order_book = ticker_order_book_[incoming_request->ticker_id_];
@@ -82,18 +90,14 @@ namespace Exchange{
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
         //     __FUNCTION__, Common::getCurrentNanos(),
         //     client_response->toString());
-        auto next_write = outgoing_responses_->getNextWriteTo();
-        *next_write = *client_response;
-        outgoing_responses_->updateWriteIndex();
+        *outgoing_responses_->getNextWriteTo(pending_client_responses_++) = *client_response;
         // TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
     }
     void MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
         //     __FUNCTION__, Common::getCurrentNanos(),
         //     market_update->toString());
-        auto next_write = outgoing_market_updates_->getNextWriteTo();
-        *next_write = *market_update;
-        outgoing_market_updates_->updateWriteIndex();
+        *outgoing_market_updates_->getNextWriteTo( pending_market_updates_++) = *market_update;
         // TTT_MEASURE(T4_MatchingEngine_LFQueue_write, logger_);
     }
 
