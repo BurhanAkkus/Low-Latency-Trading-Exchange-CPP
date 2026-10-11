@@ -111,6 +111,7 @@ namespace Exchange{
     // erase all orders at once from a level.
     Qty MEOrderBook::remainingFromMatchingBuy(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{
         auto best_offer = getBestSellOrder();
+        auto tail = best_offer ? best_offer->prev_order_ : nullptr;
         while(best_offer && best_offer->price_ <= price && qty){
             // START_MEASURE(Exchange_MEOrderBook_match);
             auto fill = std::min(qty,best_offer->qty_);
@@ -132,6 +133,7 @@ namespace Exchange{
                 OrderId_INVALID, best_offer->ticker_id_, Side::BUY,
                 best_offer->price_, fill};
             matching_engine_->sendMarketUpdate(&market_update_);
+
             // Passive order completely filled.
             if(best_offer->qty_ == 0){
                 market_update_ = {MarketUpdateType::CANCEL,
@@ -139,7 +141,21 @@ namespace Exchange{
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
                 // START_MEASURE(Exchange_MEOrderBook_removeOrder);
-                best_offer = eraseSellOrder(best_offer);
+                client_orders_[best_offer->client_id_][best_offer->client_order_id_] = nullptr;
+                // Level completely consumed.
+                if(UNLIKELY(best_offer == tail)){
+                    sell_orders[best_offer->price_].first_order_ = nullptr;
+                    clearLevel(ask_levels_, best_offer->price_);
+                    order_memory_pool_.deallocate(best_offer);
+                    findNextSellHead();
+                    best_offer = getBestSellOrder();
+                    tail = best_offer ? best_offer->prev_order_ : nullptr;
+                }
+                // There are still left in the level.
+                else{
+                    best_offer = best_offer->next_order_;
+                    order_memory_pool_.deallocate(best_offer->prev_order_);
+                }
                 // END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
             }
             else{
@@ -150,11 +166,17 @@ namespace Exchange{
             }
             // END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         }
+        if(LIKELY(best_offer)){
+            sell_orders[best_offer->price_].first_order_ = best_offer;
+            best_offer->prev_order_ = tail;
+            tail->next_order_ = best_offer;
+        }
         return qty;
     }
     
     Qty MEOrderBook::remainingFromMatchingSell(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{   
         auto best_offer = getBestBuyOrder();
+        auto tail = best_offer ? best_offer->prev_order_ : nullptr;
         while(best_offer && best_offer->price_ >= price && qty){
             // START_MEASURE(Exchange_MEOrderBook_match);
             auto fill = std::min(qty,best_offer->qty_);
@@ -176,6 +198,7 @@ namespace Exchange{
                 OrderId_INVALID, best_offer->ticker_id_, Side::SELL,
                 best_offer->price_, fill};
             matching_engine_->sendMarketUpdate(&market_update_);
+
             // Passive order completely filled.
             if(best_offer->qty_ == 0){
                 market_update_ = {MarketUpdateType::CANCEL,
@@ -183,7 +206,21 @@ namespace Exchange{
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
                 // START_MEASURE(Exchange_MEOrderBook_removeOrder);
-                best_offer = eraseBuyOrder(best_offer);
+                client_orders_[best_offer->client_id_][best_offer->client_order_id_] = nullptr;
+                // Level completely consumed.
+                if(UNLIKELY(best_offer == tail)){
+                    buy_orders[best_offer->price_].first_order_ = nullptr;
+                    clearLevel(bid_levels_, best_offer->price_);
+                    order_memory_pool_.deallocate(best_offer);
+                    findNextBuyHead();
+                    best_offer = getBestBuyOrder();
+                    tail = best_offer ? best_offer->prev_order_ : nullptr;
+                }
+                // There are still left in the level.
+                else{
+                    best_offer = best_offer->next_order_;
+                    order_memory_pool_.deallocate(best_offer->prev_order_);
+                }
                 // END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
             }
             else{
@@ -193,6 +230,11 @@ namespace Exchange{
                 matching_engine_->sendMarketUpdate(&market_update_);
             }
             // END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
+        }
+        if(LIKELY(best_offer)){
+            buy_orders[best_offer->price_].first_order_ = best_offer;
+            best_offer->prev_order_ = tail;
+            tail->next_order_ = best_offer;
         }
         return qty;
     }
