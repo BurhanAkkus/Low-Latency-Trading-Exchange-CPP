@@ -43,7 +43,7 @@ namespace Exchange{
                 const auto me_client_request =
                     incoming_requests_->getNextReadTo();
                 if (LIKELY(me_client_request)) {
-                TTT_MEASURE(T3_MatchingEngine_LFQueue_read, logger_);
+                // TTT_MEASURE(T3_MatchingEngine_LFQueue_read, logger_);
                 // logger_.log("%:% %() % Processing %\n", __FILE__,
                 //         __LINE__, __FUNCTION__,
                 //         Common::getCurrentNanos(),
@@ -60,16 +60,16 @@ namespace Exchange{
         auto& order_book = ticker_order_book_[incoming_request->ticker_id_];
         switch(incoming_request->type_){
             case ClientRequestType::NEW: {
-                START_MEASURE(Exchange_MEOrderBook_add);
+                // START_MEASURE(Exchange_MEOrderBook_add);
                 order_book->add(incoming_request->client_id_,incoming_request->order_id_,
                     incoming_request->side_,incoming_request->price_,incoming_request->qty_);
-                END_MEASURE(Exchange_MEOrderBook_add, logger_);
+                // END_MEASURE(Exchange_MEOrderBook_add, logger_);
                 return;
             }
             case ClientRequestType::CANCEL: {
-                START_MEASURE(Exchange_MEOrderBook_cancel);
+                // START_MEASURE(Exchange_MEOrderBook_cancel);
                 order_book->cancel(incoming_request->client_id_,incoming_request->order_id_);
-                END_MEASURE(Exchange_MEOrderBook_cancel, logger_);
+                // END_MEASURE(Exchange_MEOrderBook_cancel, logger_);
                 return;
             }
             default:
@@ -85,7 +85,7 @@ namespace Exchange{
         auto next_write = outgoing_responses_->getNextWriteTo();
         *next_write = *client_response;
         outgoing_responses_->updateWriteIndex();
-        TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
+        // TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
     }
     void MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
@@ -94,7 +94,7 @@ namespace Exchange{
         auto next_write = outgoing_market_updates_->getNextWriteTo();
         *next_write = *market_update;
         outgoing_market_updates_->updateWriteIndex();
-        TTT_MEASURE(T4_MatchingEngine_LFQueue_write, logger_);
+        // TTT_MEASURE(T4_MatchingEngine_LFQueue_write, logger_);
     }
 
 }

@@ -33,11 +33,11 @@ namespace Exchange{
     }
     
     void MEOrderBook::addSellOrder(ClientId client_id, OrderId client_order_id,  Price price, Qty qty, OrderId new_market_order_id) noexcept{
-        START_MEASURE(Exchange_MEOrderBook_checkForMatch);
+        // START_MEASURE(Exchange_MEOrderBook_checkForMatch);
         const auto leaves_qty = remainingFromMatchingSell(price, qty, client_id, client_order_id, new_market_order_id);
-        END_MEASURE(Exchange_MEOrderBook_checkForMatch, (*logger_));
+        // END_MEASURE(Exchange_MEOrderBook_checkForMatch, (*logger_));
         if(LIKELY(leaves_qty)){
-            START_MEASURE(Exchange_MEOrderBook_addOrder);
+            // START_MEASURE(Exchange_MEOrderBook_addOrder);
             // Add to price list
             MEOrdersAtPrice& level = sell_orders[price];
             MEOrder* level_head = level.first_order_;
@@ -61,7 +61,7 @@ namespace Exchange{
             compareAndAssignMin(head_of_ask_,price);
             // update client Orders;
             client_orders_[client_id][client_order_id] = order;
-            END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
+            // END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
             // send market update.
             market_update_ = {MarketUpdateType::ADD,
                 new_market_order_id, ticker_id_, Side::SELL, price,
@@ -70,11 +70,11 @@ namespace Exchange{
         }
     }   
     void MEOrderBook::addBuyOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept{
-        START_MEASURE(Exchange_MEOrderBook_checkForMatch);
+        // START_MEASURE(Exchange_MEOrderBook_checkForMatch);
         const auto leaves_qty = remainingFromMatchingBuy(price, qty, client_id, client_order_id, new_market_order_id);
-        END_MEASURE(Exchange_MEOrderBook_checkForMatch, (*logger_));
+        // END_MEASURE(Exchange_MEOrderBook_checkForMatch, (*logger_));
         if(LIKELY(leaves_qty)){
-            START_MEASURE(Exchange_MEOrderBook_addOrder);
+            // START_MEASURE(Exchange_MEOrderBook_addOrder);
             // Add to price list
             MEOrdersAtPrice& level = buy_orders[price];
             MEOrder* level_head = level.first_order_;
@@ -98,7 +98,7 @@ namespace Exchange{
             if (price > head_of_bid_) head_of_bid_ = price;
             // update client Orders;
             client_orders_[client_id][client_order_id] = order;
-            END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
+            // END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
             // send market update.
             market_update_ = {MarketUpdateType::ADD,
                 new_market_order_id, ticker_id_, Side::BUY, price,
@@ -112,7 +112,7 @@ namespace Exchange{
     Qty MEOrderBook::remainingFromMatchingBuy(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{
         auto best_offer = getBestSellOrder();
         while(best_offer && best_offer->price_ <= price && qty){
-            START_MEASURE(Exchange_MEOrderBook_match);
+            // START_MEASURE(Exchange_MEOrderBook_match);
             auto fill = std::min(qty,best_offer->qty_);
             qty -= fill;
             best_offer->qty_ -= fill;
@@ -138,9 +138,9 @@ namespace Exchange{
                     best_offer->market_order_id_, ticker_id_, Side::SELL,
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
-                START_MEASURE(Exchange_MEOrderBook_removeOrder);
+                // START_MEASURE(Exchange_MEOrderBook_removeOrder);
                 best_offer = eraseSellOrder(best_offer);
-                END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
+                // END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
             }
             else{
                 market_update_ = {MarketUpdateType::MODIFY,
@@ -148,7 +148,7 @@ namespace Exchange{
                     best_offer->price_,best_offer->qty_ };
                 matching_engine_->sendMarketUpdate(&market_update_);
             }
-            END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
+            // END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         }
         return qty;
     }
@@ -156,7 +156,7 @@ namespace Exchange{
     Qty MEOrderBook::remainingFromMatchingSell(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{   
         auto best_offer = getBestBuyOrder();
         while(best_offer && best_offer->price_ >= price && qty){
-            START_MEASURE(Exchange_MEOrderBook_match);
+            // START_MEASURE(Exchange_MEOrderBook_match);
             auto fill = std::min(qty,best_offer->qty_);
             qty -= fill;
             best_offer->qty_ -= fill;
@@ -182,9 +182,9 @@ namespace Exchange{
                     best_offer->market_order_id_, ticker_id_, Side::BUY,
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
-                START_MEASURE(Exchange_MEOrderBook_removeOrder);
+                // START_MEASURE(Exchange_MEOrderBook_removeOrder);
                 best_offer = eraseBuyOrder(best_offer);
-                END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
+                // END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
             }
             else{
                 market_update_ = {MarketUpdateType::MODIFY,
@@ -192,7 +192,7 @@ namespace Exchange{
                     best_offer->price_,best_offer->qty_ };
                 matching_engine_->sendMarketUpdate(&market_update_);
             }
-            END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
+            // END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         }
         return qty;
     }
@@ -215,14 +215,14 @@ namespace Exchange{
             order->market_order_id_,ticker_id_, order->side_,
             order->price_, 0};
         matching_engine_->sendMarketUpdate(&market_update_);
-        START_MEASURE(Exchange_MEOrderBook_removeOrder);
+        // START_MEASURE(Exchange_MEOrderBook_removeOrder);
         if(order->side_ == Side::BUY){ 
             eraseBuyOrder(order);
         }
         else{
             eraseSellOrder(order);
         }
-        END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
+        // END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
     }
         
     // Preserves head

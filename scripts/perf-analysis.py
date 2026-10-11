@@ -43,6 +43,8 @@ PERCENTILES = (50, 90, 99, 99.9)
 
 # Tags that mark one incoming request, earliest first. Used by --skip-first to count requests.
 REQUEST_TAGS = ("T1_OrderServer_TCP_read", "T3_MatchingEngine_LFQueue_read")
+# Fallback when no request hop is logged: one line per request, logged when it finishes.
+REQUEST_RDTSC_TAG = "Exchange_MatchingEngine_processClientRequest"
 
 
 def detect_tsc_ghz():
@@ -124,9 +126,13 @@ def main():
     # Warm-up: count requests by the earliest hop present, drop everything logged before the (N+1)th.
     if args.skip_first:
         request_tag = next((t for t in REQUEST_TAGS if ttt.get(t)), None)
-        if not request_tag:
-            sys.exit("--skip-first needs one of " + ", ".join(REQUEST_TAGS) + " in the logs")
-        starts = sorted(ttt[request_tag])
+        if request_tag:
+            starts = sorted(ttt[request_tag])
+        elif rdtsc.get(REQUEST_RDTSC_TAG):
+            request_tag = REQUEST_RDTSC_TAG
+            starts = sorted(t for t, _ in rdtsc[request_tag])
+        else:
+            sys.exit("--skip-first needs one of " + ", ".join(REQUEST_TAGS + (REQUEST_RDTSC_TAG,)) + " in the logs")
         if args.skip_first >= len(starts):
             sys.exit(f"--skip-first {args.skip_first} skips all {len(starts)} requests")
         cutoff = starts[args.skip_first]
