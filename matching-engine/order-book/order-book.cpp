@@ -275,6 +275,8 @@ namespace Exchange{
         return next_order;
     }
 
+    //ToDo
+    // Linear scan vs bitmap scan
     // The old head level just emptied, every other ask is above it: the new head is the
     // lowest set bit. ME_MAX_PRICE_LEVELS + 1 if there are no asks left.
     inline void MEOrderBook::findNextSellHead() noexcept {
