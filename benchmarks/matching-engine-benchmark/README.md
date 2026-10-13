@@ -34,8 +34,9 @@ shows up in the numbers.
 
 ## 3. Run
 
-[`run-benchmark.sh`](run-benchmark.sh) runs the benchmark and analyses the log (step 4) in one
-go. Options are passed through to the benchmark:
+[`run-benchmark.sh`](run-benchmark.sh) rebuilds the benchmark, runs it, analyses the log
+(step 4) and records the result in [`results.csv`](results.csv) (step 5), in one go. Options are
+passed through to the benchmark:
 
 ```bash
 <repo>/benchmarks/matching-engine-benchmark/run-benchmark.sh
@@ -120,9 +121,16 @@ numbers as the code's absolute cost.
 
 - Run 3-5 times per version and compare medians, single runs are noisy.
 - Change one thing at a time and keep everything else (options, cores, machine setup) the same.
-- Save each result under the commit it measured:
+- Every `run-benchmark.sh` run appends a row to [`results.csv`](results.csv):
 
-```bash
-mkdir -p <repo>/benchmarks/matching-engine-benchmark/results
-python3 <repo>/scripts/perf-analysis.py --skip-first 50000 > <repo>/benchmarks/matching-engine-benchmark/results/$(git -C <repo> rev-parse --short HEAD).txt
-```
+| Column | Meaning |
+|---|---|
+| `date` | when the run finished |
+| `commit` | `HEAD` at the time |
+| `dirty` | `yes` if the engine code (`common/`, `matching-engine/` and the benchmark driver) had uncommitted changes |
+| `changes` | fingerprint of those changes: rows with the same commit and fingerprint ran the same code |
+| `options` | the options passed to the benchmark |
+| `count` ... `max` | `processClientRequest` stats in ns, after skipping the first 10% |
+
+  Set `BENCH_RESULTS=<file>` to record somewhere else, e.g. for experiments you don't want in
+  the history. A run with `BENCH_BIN` set isn't rebuilt, its row notes the binary.
