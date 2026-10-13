@@ -76,17 +76,9 @@ placement effect that otherwise changes some runs (not others) by ~40 ns at p50.
 
 ## How results are compared
 
-- Versions are built from their commits with the same flags and run **alternately** (A, B, A,
-  B, ...), so drift during a session affects both.
-- Before every run the machine **cools down**: at least 30 s and until the package is back to
-  ≤ 55 °C. No run in these results was thermally throttled.
-- Compare **p90** (and p99). p50 is a poor summary here: the latency distribution has a gap
-  right at the median (~80 ns cancels and unmatched orders, ~120 ns+ orders that match), so
-  p50 jumps between the two sides for tiny changes.
+- Compare **p90** (and p99). p50 is a poor summary here.
 - **p99.9 and max are dominated by noise** we have not fully explained, don't use them to
-  compare code changes.
-- Small effects (a few ns) need 10+ runs per version. A single run is enough when the
-  difference is far outside the run-to-run spread.
+  compare code changes. My suspicion is that the order lookup client_orders_[client_id][order_id]. The array is 24MB with 30 MB L3 cache.
 
 ## What is measured
 
@@ -101,74 +93,6 @@ commented out in the code and can be turned back on for a closer look.
 
 The optimisations in order, with the numbers measured at the time. The workload and the
 machine setup changed along the way, so compare numbers within a table, not across tables.
-
-### Phase 1: dense book, all measurements on
-
-Workload: 100,000 requests 500 µs apart, prices 101-110, 4 clients, first 10,000 skipped. No
-core isolation. Every code block measurement and TTT hop logged.
-
-| Commit | Change | `processClientRequest` p50 / p90 / p99 / p99.9 / max | one fill (`match`) p50 |
-|---|---|---|---|
-| `20c7a60` | baseline | 8,879 / 51,617 / 236,320 / 414,755 / 641,316 | 14,846 |
-| `7f22e7a` | removed the "Processing" / "Sending" log lines from the hot path | 2,722 / 8,858 / 31,311 / 82,728 / 131,207 | 2,552 |
-| `0d36b92`, `26b366e` | lock-free queue and logger rewrite | 486 / 1,293 / 2,177 / 4,382 / 17,485 | 386 |
-| `d212993`..`ccba682` | memory pool free list | unchanged | unchanged |
-
-- **Hot path logging** (`7f22e7a`): every response and market update was logged as text: a
-  `std::stringstream` `toString()` and ~260 characters per line.
-- **Queue and logger** (`0d36b92`, `26b366e`): the logger pushed one queue element per
-  character, and every push was a sequentially consistent store plus a locked `size_++` on a
-  counter the logger thread was also modifying (~11 ns per character, and an ~8x slower mode
-  when the two threads collided). Now the queue is single-producer/single-consumer with
-  release/acquire counters on separate cache lines and no shared counter, strings go in 8
-  characters per element, and a log line is published with one index update. A power of two
-  capacity (slot = counter & mask instead of `%`) is part of `0d36b92`; on its own it made no
-  measurable difference.
-- **Memory pool** (`d212993`..`ccba682`): `allocate` scanned for the next free slot. It is a
-  stack of free indices now (backed by a pre-sized vector, no allocation after construction).
-  `addOrder`'s max dropped from 22-29 µs to 2.7-3.7 µs, the rest was unchanged.
-
-### Phase 2: sparse book
-
-Workload: the current defaults (500,000 requests, 10 µs apart, prices 1-256).
-
-| Commit | Change | Result |
-|---|---|---|
-| `0ce11e6` | next best price from a bitmap of non-empty levels instead of a linear scan | `removeOrder` p90 43-50 → 35-38, p99 54-60 → 44-46 (3 runs each). `processClientRequest` unchanged. |
-| `31ac48a` | detailed measurements commented out | p50 / p90 / p99 / p99.9: 380 / 1,128 / 2,065 / 4,627 → 86 / 302 / 530 / 1,631 |
-| (boot parameters) | core isolation | interrupts on the engine core per run: ~6,200 → 2-7. Latency unchanged (3 runs each). |
-| `0fd0727` | a sweep frees filled orders without unlinking them, the level is relinked once | no measurable difference: p90 median 312 [256-369] → 318 [254-338], 10 runs each |
-| `6aa4733` | responses and market updates published once per request | mean / p50 / p90 / p99: 134 / 79 / 276 / 502 → 109 / 84 / 164 / 314 |
-
-- **Bitmap head search** (`0ce11e6`): 256 price levels per side are 4 × 64-bit words; the next
-  best price is `std::countr_zero` / `std::countl_zero` on at most 4 words. It only shows in a
-  sparse book: with prices 101-110 the levels are adjacent and the scan was already short.
-- **Core isolation**: at 10 µs between requests the engine is busy ~1.5% of the time, so few
-  timer ticks landed inside a request. It will matter as load increases.
-- **Deferred relink** (`0fd0727`): saves two pointer writes per fully filled order, too small
-  to measure here (permutation test p = 0.67). Kept, it does strictly less work.
-- **Batched publishing** (`6aa4733`): the consumers poll the output queues, so every publish
-  takes the write index's cache line back from the consumer's core (~60-100 ns). A fill sends
-  2 responses and 2 market updates, which were 4 publishes per fill. Now each queue is
-  published once per request. p90 dropped by 112 ns, far outside the baseline's 10 run p90
-  range (256-369), so one run each was enough.
-
-## Noise
-
-Same binary, same request stream, yet p90 varied between 256 and 369 ns over 10 runs. What we
-found:
-
-| Source | Effect | Status |
-|---|---|---|
-| Consumers polling the output queues | each publish takes the queue's cache line back from the polling core, varies with timing. A driver that drains once per request instead of polling cut p90 from 301-350 to 191-209. | Real, the finished exchange polls too. Reduced by batched publishing (`6aa4733`). |
-| Memory placement | in ~1 of 3 runs a rejected cancel takes ~115 ns instead of ~41 (one extra memory access). | Fixed for comparisons with huge pages + no ASLR (no flips in 12 runs). |
-| ~25 µs max in every run | not interrupts, SMIs, page faults or context switches, not request size. | Unexplained. |
-| Isolated core stalls 340-490 µs about once a second when idle | likely the few timer ticks `nohz_full` keeps (~5 per 10 s on CPU 4), not confirmed. Rarely inside a request at the current load. | Not investigated (needs kernel tracing). |
-
-Ruled out: memory bandwidth / L3 contention (4 cores streaming 256 MB each made no
-difference), background load (other cores idle), clock speed (steady 4.95-4.98 GHz),
-thermal throttling (0 events), SMIs (0), page faults and context switches on the engine thread
-(0), TLB misses (97% huge page coverage alone did not reduce the spread).
 
 ## Reproduce
 
