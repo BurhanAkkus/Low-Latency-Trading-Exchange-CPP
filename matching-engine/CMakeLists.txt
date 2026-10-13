@@ -29,5 +29,5 @@ target_link_libraries(libexchange PUBLIC libcommon)
 add_executable(exchange_main matching-engine-main.cpp)
 target_link_libraries(exchange_main PRIVATE libexchange pthread)
 
-add_executable(matching_engine_benchmark ${REPO_ROOT}/benchmarks/matching-engine-benchmark.cpp)
+add_executable(matching_engine_benchmark ${REPO_ROOT}/benchmarks/matching-engine-benchmark/matching-engine-benchmark.cpp)
 target_link_libraries(matching_engine_benchmark PRIVATE libexchange pthread)

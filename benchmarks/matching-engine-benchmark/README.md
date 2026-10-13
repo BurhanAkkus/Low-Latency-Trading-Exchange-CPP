@@ -1,8 +1,6 @@
-# Benchmarks
+# Matching engine benchmark
 
-## Matching engine benchmark
-
-`matching-engine-benchmark.cpp` measures how long the matching engine takes to process a
+[`matching-engine-benchmark.cpp`](matching-engine-benchmark.cpp) measures how long the matching engine takes to process a
 request: from reading it off its request queue (`T3`) to writing the client response (`T4t`)
 and market updates (`T4`). It also times the code blocks inside the engine and the order book
 (`add`, `cancel`, `match`, ...).
@@ -12,9 +10,10 @@ requests, pushes them straight into the engine's request queue at a fixed rate, 
 engine's output queues. TCP → engine (`T1`/`T2`) is not measured until the order server exists.
 
 The measurements are written to the engine's log by the macros in `common/perf-utils.h` and
-analysed afterwards with `scripts/perf-analysis.py`.
+analysed afterwards with `scripts/perf-analysis.py`. Results and what changed them over time are
+in [results.md](results.md).
 
-### 1. Build
+## 1. Build
 
 The benchmark is built by the CMake project in `matching-engine/` (Release, `-O3` by default).
 From the repo root:
@@ -27,33 +26,33 @@ cmake --build cmake-build-release -j --target matching_engine_benchmark
 
 `matching-engine/build.sh` builds everything (Release, Ninja) into the same directory.
 
-### 2. Prepare the machine
+## 2. Prepare the machine
 
 Plug the laptop in, close heavy apps (browser, IDE indexing) and use the same power profile for
 every run you compare: background load and power mode change the CPU's clock speed, which
 shows up in the numbers.
 
-Turbo can stay on: a run keeps only three threads busy, far below the CPU's power limits, so
-the clock speed should not drop during a run. To confirm, watch the pinned cores' clock speed
-(`Bzy_MHz`) while a benchmark runs:
+## 3. Run
+
+[`run-benchmark.sh`](run-benchmark.sh) runs the benchmark and analyses the log (step 4) in one
+go. Options are passed through to the benchmark:
 
 ```bash
-sudo turbostat --quiet --cpu 4,6,8 --show CPU,Bzy_MHz,CoreTmp --interval 1
+<repo>/benchmarks/matching-engine-benchmark/run-benchmark.sh
+<repo>/benchmarks/matching-engine-benchmark/run-benchmark.sh --price-min 101 --price-max 110
 ```
 
-If `Bzy_MHz` stays flat during a run and is the same across back-to-back runs, the clock speed
-is not affecting the results. If it drops during a run, or a second run starts lower, the CPU
-is heating up: turn turbo off while benchmarking
-(`echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo`, `echo 0` to turn it back on).
+It runs the benchmark in `/tmp/me-bench` (override with `BENCH_DIR`): the engine writes
+`exchange_matching_engine.log` to the current directory (~36 MB with the defaults). It also runs
+it with 2 MB memory pages and no address randomisation
+(`GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R`), which gives every run the same memory
+layout.
 
-### 3. Run
-
-The engine writes `exchange_matching_engine.log` to the **current directory** (~300 MB with
-the defaults), so run it from a scratch directory:
+To run the binary by hand instead:
 
 ```bash
 mkdir -p /tmp/me-bench && cd /tmp/me-bench && rm -f *.log
-<repo>/matching-engine/cmake-build-release/matching_engine_benchmark
+GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R <repo>/matching-engine/cmake-build-release/matching_engine_benchmark
 ```
 
 | Option | Default | Meaning |
@@ -86,7 +85,7 @@ p99.9 is ~5 µs, so 10 µs leaves headroom. Below ~2 µs the engine is saturated
 
 Short runs see fewer interrupts and look better at the tail: compare runs of the same length.
 
-### 4. Analyse
+## 4. Analyse
 
 From the directory with the log:
 
@@ -117,13 +116,13 @@ Measurements include the cost of logging them: every measurement writes a log li
 counted in any measurement around it. Compare runs with each other rather than reading the
 numbers as the code's absolute cost.
 
-### 5. Compare changes
+## 5. Compare changes
 
 - Run 3-5 times per version and compare medians, single runs are noisy.
 - Change one thing at a time and keep everything else (options, cores, machine setup) the same.
 - Save each result under the commit it measured:
 
 ```bash
-mkdir -p <repo>/benchmarks/results
-python3 <repo>/scripts/perf-analysis.py --skip-first 50000 > <repo>/benchmarks/results/$(git -C <repo> rev-parse --short HEAD).txt
+mkdir -p <repo>/benchmarks/matching-engine-benchmark/results
+python3 <repo>/scripts/perf-analysis.py --skip-first 50000 > <repo>/benchmarks/matching-engine-benchmark/results/$(git -C <repo> rev-parse --short HEAD).txt
 ```

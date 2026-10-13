@@ -1,0 +1,185 @@
+# Matching engine benchmark results
+
+Latency of the matching engine, measured with
+[`matching-engine-benchmark.cpp`](matching-engine-benchmark.cpp) and analysed with
+[`scripts/perf-analysis.py`](../../scripts/perf-analysis.py). See the
+[README](README.md) for how the benchmark works.
+
+All values are nanoseconds.
+
+## Current result
+
+Commit `6aa4733`, one run, default settings (below):
+
+| | mean | p50 | p90 | p99 | p99.9 | max |
+|---|---|---|---|---|---|---|
+| `processClientRequest` | 109 | 84 | 164 | 314 | 3,747 | 25,422 |
+
+`processClientRequest` is the time from the engine reading a request off its queue to having
+written and published every response and market update for it. It is the only measurement
+left in the hot path, see [what is measured](#what-is-measured).
+
+## Setup
+
+**Machine:** Intel i7-14650HX, Ubuntu 26.04.1.
+
+**Kernel boot parameters** (results from "core isolation" on):
+
+```
+isolcpus=nohz,domain,managed_irq,4-9 nohz_full=4-9 rcu_nocbs=4-9 irqaffinity=0-3,10-23 nmi_watchdog=0
+```
+
+Physical cores 2-4 (CPUs 4-9) are reserved for the benchmark: the scheduler, device interrupts,
+the 1 kHz timer tick and RCU callbacks stay off them. Only the benchmark's threads, which pin
+themselves, run there.
+
+| Parameter | What it does |
+|---|---|
+| `isolcpus=…,4-9` | Takes the CPUs out of the kernel's general use. The flags before the list choose what is taken away. |
+| `domain` | Removes the CPUs from the scheduler's load balancing: it never places or moves a thread there by itself. Only threads that pin themselves to those CPUs run on them. |
+| `nohz` | Stops the timer tick on those CPUs while only one thread runs there (see `nohz_full`). |
+| `managed_irq` | Keeps managed interrupts off the CPUs where possible. These are devices with one hardware queue per CPU whose interrupts the kernel spreads over all CPUs, such as the NVMe disk. |
+| `nohz_full=4-9` | Stops the periodic timer tick on a CPU that runs a single thread. The kernel normally interrupts every busy CPU 1,000 times a second (`CONFIG_HZ=1000`) to decide whether to switch threads, account CPU time and run expired timers; with one thread there is nothing to switch to, and other CPUs do the bookkeeping. About one tick per second remains. |
+| `rcu_nocbs=4-9` | RCU callbacks (deferred freeing of kernel data) run in kernel threads on other CPUs instead of on the CPU that queued them. Implied by `nohz_full` on current kernels. |
+| `irqaffinity=0-3,10-23` | Default CPUs for all other device interrupts. Only a default: a driver can pin its own interrupts. The Wi-Fi driver does, one receive queue per CPU, so its queues on CPUs 4-9 stay there. They fire with network traffic: turn Wi-Fi off for benchmarks or move them by writing `0-3,10-23` to `/proc/irq/<n>/smp_affinity_list`. |
+| `nmi_watchdog=0` | Turns off the hard-lockup detector, which sends every CPU a non-maskable interrupt every few seconds to check it still responds. An NMI can't be blocked, so it interrupts the engine whatever it is doing. |
+
+Together they took the interrupts on the engine's CPU from ~6,200 per run to 2-7.
+
+**Threads:** matching engine on CPU 4, its logger on CPU 6, benchmark driver on CPU 8. The
+hyper-thread siblings 5, 7, 9 stay idle.
+
+**Workload** (benchmark defaults since `9bf8326`):
+
+| Setting | Value |
+|---|---|
+| requests | 500,000, first 50,000 skipped as warm-up |
+| interval | 10 µs between requests (100k requests/s) |
+| prices | uniform in 1-256: the whole book, sparse levels |
+| quantity | 1-100 |
+| cancels | 25% of requests cancel a random earlier order (most are already filled → `CANCEL_REJECTED`) |
+| clients / tickers | 16 / 8 |
+| seed | 42: every run sends the identical request stream |
+
+The driver polls the engine's output queues continuously while it waits to send the next
+request, like the order server and market data publisher will.
+
+**Run settings** for comparisons (since the noise investigation, see [noise](#noise)), as
+[`run-benchmark.sh`](run-benchmark.sh) runs it:
+
+```bash
+GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R matching_engine_benchmark
+```
+
+2 MB pages for large allocations and no address randomisation. This removes a memory
+placement effect that otherwise changes some runs (not others) by ~40 ns at p50.
+
+## How results are compared
+
+- Versions are built from their commits with the same flags and run **alternately** (A, B, A,
+  B, ...), so drift during a session affects both.
+- Before every run the machine **cools down**: at least 30 s and until the package is back to
+  ≤ 55 °C. No run in these results was thermally throttled.
+- Compare **p90** (and p99). p50 is a poor summary here: the latency distribution has a gap
+  right at the median (~80 ns cancels and unmatched orders, ~120 ns+ orders that match), so
+  p50 jumps between the two sides for tiny changes.
+- **p99.9 and max are dominated by noise** we have not fully explained, don't use them to
+  compare code changes.
+- Small effects (a few ns) need 10+ runs per version. A single run is enough when the
+  difference is far outside the run-to-run spread.
+
+## What is measured
+
+The engine's hot path logs only `processClientRequest` (one RDTSC measurement per request).
+Every measurement costs the engine thread a timestamp and ~8 log queue writes (~60-70 ns), and
+nested measurements include each other's logging. With all of them on, the numbers mostly
+measured the logging itself, see `31ac48a` below. The detailed measurements (`add`, `cancel`,
+`match`, `checkForMatch`, `addOrder`, `removeOrder`) and the TTT hops (T3, T4, T4t) are
+commented out in the code and can be turned back on for a closer look.
+
+## History
+
+The optimisations in order, with the numbers measured at the time. The workload and the
+machine setup changed along the way, so compare numbers within a table, not across tables.
+
+### Phase 1: dense book, all measurements on
+
+Workload: 100,000 requests 500 µs apart, prices 101-110, 4 clients, first 10,000 skipped. No
+core isolation. Every code block measurement and TTT hop logged.
+
+| Commit | Change | `processClientRequest` p50 / p90 / p99 / p99.9 / max | one fill (`match`) p50 |
+|---|---|---|---|
+| `20c7a60` | baseline | 8,879 / 51,617 / 236,320 / 414,755 / 641,316 | 14,846 |
+| `7f22e7a` | removed the "Processing" / "Sending" log lines from the hot path | 2,722 / 8,858 / 31,311 / 82,728 / 131,207 | 2,552 |
+| `0d36b92`, `26b366e` | lock-free queue and logger rewrite | 486 / 1,293 / 2,177 / 4,382 / 17,485 | 386 |
+| `d212993`..`ccba682` | memory pool free list | unchanged | unchanged |
+
+- **Hot path logging** (`7f22e7a`): every response and market update was logged as text: a
+  `std::stringstream` `toString()` and ~260 characters per line.
+- **Queue and logger** (`0d36b92`, `26b366e`): the logger pushed one queue element per
+  character, and every push was a sequentially consistent store plus a locked `size_++` on a
+  counter the logger thread was also modifying (~11 ns per character, and an ~8x slower mode
+  when the two threads collided). Now the queue is single-producer/single-consumer with
+  release/acquire counters on separate cache lines and no shared counter, strings go in 8
+  characters per element, and a log line is published with one index update. A power of two
+  capacity (slot = counter & mask instead of `%`) is part of `0d36b92`; on its own it made no
+  measurable difference.
+- **Memory pool** (`d212993`..`ccba682`): `allocate` scanned for the next free slot. It is a
+  stack of free indices now (backed by a pre-sized vector, no allocation after construction).
+  `addOrder`'s max dropped from 22-29 µs to 2.7-3.7 µs, the rest was unchanged.
+
+### Phase 2: sparse book
+
+Workload: the current defaults (500,000 requests, 10 µs apart, prices 1-256).
+
+| Commit | Change | Result |
+|---|---|---|
+| `0ce11e6` | next best price from a bitmap of non-empty levels instead of a linear scan | `removeOrder` p90 43-50 → 35-38, p99 54-60 → 44-46 (3 runs each). `processClientRequest` unchanged. |
+| `31ac48a` | detailed measurements commented out | p50 / p90 / p99 / p99.9: 380 / 1,128 / 2,065 / 4,627 → 86 / 302 / 530 / 1,631 |
+| (boot parameters) | core isolation | interrupts on the engine core per run: ~6,200 → 2-7. Latency unchanged (3 runs each). |
+| `0fd0727` | a sweep frees filled orders without unlinking them, the level is relinked once | no measurable difference: p90 median 312 [256-369] → 318 [254-338], 10 runs each |
+| `6aa4733` | responses and market updates published once per request | mean / p50 / p90 / p99: 134 / 79 / 276 / 502 → 109 / 84 / 164 / 314 |
+
+- **Bitmap head search** (`0ce11e6`): 256 price levels per side are 4 × 64-bit words; the next
+  best price is `std::countr_zero` / `std::countl_zero` on at most 4 words. It only shows in a
+  sparse book: with prices 101-110 the levels are adjacent and the scan was already short.
+- **Core isolation**: at 10 µs between requests the engine is busy ~1.5% of the time, so few
+  timer ticks landed inside a request. It will matter as load increases.
+- **Deferred relink** (`0fd0727`): saves two pointer writes per fully filled order, too small
+  to measure here (permutation test p = 0.67). Kept, it does strictly less work.
+- **Batched publishing** (`6aa4733`): the consumers poll the output queues, so every publish
+  takes the write index's cache line back from the consumer's core (~60-100 ns). A fill sends
+  2 responses and 2 market updates, which were 4 publishes per fill. Now each queue is
+  published once per request. p90 dropped by 112 ns, far outside the baseline's 10 run p90
+  range (256-369), so one run each was enough.
+
+## Noise
+
+Same binary, same request stream, yet p90 varied between 256 and 369 ns over 10 runs. What we
+found:
+
+| Source | Effect | Status |
+|---|---|---|
+| Consumers polling the output queues | each publish takes the queue's cache line back from the polling core, varies with timing. A driver that drains once per request instead of polling cut p90 from 301-350 to 191-209. | Real, the finished exchange polls too. Reduced by batched publishing (`6aa4733`). |
+| Memory placement | in ~1 of 3 runs a rejected cancel takes ~115 ns instead of ~41 (one extra memory access). | Fixed for comparisons with huge pages + no ASLR (no flips in 12 runs). |
+| ~25 µs max in every run | not interrupts, SMIs, page faults or context switches, not request size. | Unexplained. |
+| Isolated core stalls 340-490 µs about once a second when idle | likely the few timer ticks `nohz_full` keeps (~5 per 10 s on CPU 4), not confirmed. Rarely inside a request at the current load. | Not investigated (needs kernel tracing). |
+
+Ruled out: memory bandwidth / L3 contention (4 cores streaming 256 MB each made no
+difference), background load (other cores idle), clock speed (steady 4.95-4.98 GHz),
+thermal throttling (0 events), SMIs (0), page faults and context switches on the engine thread
+(0), TLB misses (97% huge page coverage alone did not reduce the spread).
+
+## Reproduce
+
+```bash
+# build (from the repo root)
+cmake -S matching-engine -B matching-engine/cmake-build-release
+cmake --build matching-engine/cmake-build-release -j --target matching_engine_benchmark
+
+# run and analyse (the log goes to /tmp/me-bench)
+<repo>/benchmarks/matching-engine-benchmark/run-benchmark.sh
+```
+
+To compare two commits, build each into its own binary and alternate runs with a cool-down
+between them (see [how results are compared](#how-results-are-compared)).
