@@ -13,6 +13,8 @@ namespace Exchange{
     }
     void MEOrderBook::add(ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept{
         // send accepted ClientResponse
+        // ToDo - improve
+        // Massive array lookup! Super sparse. employ a better suited sparse container.
         if(client_orders_[client_id][client_order_id] != nullptr){
             client_response_ = {ClientResponseType::REJECTED,
                 client_id, ticker_id_, client_order_id,
