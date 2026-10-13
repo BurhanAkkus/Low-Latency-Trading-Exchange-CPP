@@ -39,6 +39,8 @@ namespace Common{
         LFQueue& operator=(const LFQueue&) = delete; // Copy assignment
         LFQueue(const LFQueue&&) = delete; // Move ctor
         LFQueue& operator=(const LFQueue&&) = delete; // Move assignment
+        //ToDo - research
+        // Check memory_orders.
 
         // Producer.
         // offset > 0 returns the slots after the next one, fill them and publish them all
