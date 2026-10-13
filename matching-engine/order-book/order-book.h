@@ -32,15 +32,22 @@ namespace Exchange{
         // Single array of orders. 
         // hold the crossover.
         // Preserve the invariant head of bid < head of ask.
-        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS + 1> sell_orders;
-        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS + 1> buy_orders;
-        // Valid price range is [1, ME_MAX_PRICE_LEVELS]
+        // Valid price range is [1, ME_MAX_PRICE_LEVELS]. Levels 0 and ME_MAX_PRICE_LEVELS + 1
+        // are the sentinel levels (see the level bits below).
+        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS + 2> sell_orders;
+        std::array<MEOrdersAtPrice, ME_MAX_PRICE_LEVELS + 2> buy_orders;
+        // The only orders on the sentinel levels, linked to themselves. An ask above and a bid below
+        // every valid price never match, so the best order is never null: the matching loops stop
+        // at them when a side runs out.
+        MEOrder ask_sentinel_order_;
+        MEOrder bid_sentinel_order_;
         uint64_t head_of_bid_ = 0;
         uint64_t head_of_ask_ = ME_MAX_PRICE_LEVELS + 1;
-        // Bit (price - 1) is set while that price level has orders: price 1 is bit 0 of word 0,
-        // price 256 is bit 63 of word 3. Finds the next head when the head level empties.
-        static_assert(ME_MAX_PRICE_LEVELS % 64 == 0, "Price levels must fill whole 64 bit words.");
-        using LevelBits = std::array<uint64_t, ME_MAX_PRICE_LEVELS / 64>;
+        // Bit p is set while price level p has orders, used to find the next head when the head
+        // level empties. Bit 0 (bids) and bit ME_MAX_PRICE_LEVELS + 1 (asks) are sentinels, always
+        // set: the head search always finds a bit, and finding the sentinel means the side is
+        // empty, the same values as the empty heads above.
+        using LevelBits = std::array<uint64_t, (ME_MAX_PRICE_LEVELS + 1) / 64 + 1>;
         LevelBits ask_levels_{};
         LevelBits bid_levels_{};
         std::array<std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>,ME_MAX_NUM_CLIENTS> client_orders_{};
@@ -56,12 +63,15 @@ namespace Exchange{
             return next_market_order_id_++;
         }
         //ToDo
-        // price has to be validated before here, price 0 would index word -1.
+        // price has to be validated before here, a price above ME_MAX_PRICE_LEVELS + 1 is past
+        // the last word, and a cleared sentinel would make the head search run off the bitmap.
+        // An aggressor priced at a sentinel (a BUY at ME_MAX_PRICE_LEVELS + 1, a SELL at 0)
+        // would match the sentinel order.
         static inline auto setLevel(LevelBits& levels, Price price) noexcept{
-            levels[(price - 1) / 64] |= 1ull << ((price - 1) % 64);
+            levels[price / 64] |= 1ull << (price % 64);
         }
         static inline auto clearLevel(LevelBits& levels, Price price) noexcept{
-            levels[(price - 1) / 64] &= ~(1ull << ((price - 1) % 64));
+            levels[price / 64] &= ~(1ull << (price % 64));
         }
         inline auto getSellOrdersAtPrice(Price price) noexcept->MEOrdersAtPrice*{
             return &sell_orders[price];
@@ -69,16 +79,17 @@ namespace Exchange{
         inline auto getBuyOrdersAtPrice(Price price) noexcept ->MEOrdersAtPrice*{
             return &buy_orders[price];
         }
-        inline auto getBestSellOrder(){
-            return head_of_ask_ <= ME_MAX_PRICE_LEVELS? getSellOrdersAtPrice(head_of_ask_)->first_order_ : nullptr;
+        // The sentinel order when the side is empty, never null.
+        inline auto getBestSellOrder() noexcept -> MEOrder*{
+            return sell_orders[head_of_ask_].first_order_;
         }
-        inline auto getBestBuyOrder(){
-            return head_of_bid_ > 0? getBuyOrdersAtPrice(head_of_bid_)->first_order_ : nullptr;
+        inline auto getBestBuyOrder() noexcept -> MEOrder*{
+            return buy_orders[head_of_bid_].first_order_;
         }
         void addSellOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
         void addBuyOrder(ClientId client_id, OrderId client_order_id, Price price, Qty qty, OrderId new_market_order_id) noexcept;
-        MEOrder* eraseSellOrder(MEOrder* order) noexcept ;
-        MEOrder* eraseBuyOrder(MEOrder* order) noexcept ;
+        void eraseSellOrder(MEOrder* order) noexcept ;
+        void eraseBuyOrder(MEOrder* order) noexcept ;
         inline void findNextSellHead()noexcept;
         inline void findNextBuyHead()noexcept;
         Qty remainingFromMatchingBuy(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept;

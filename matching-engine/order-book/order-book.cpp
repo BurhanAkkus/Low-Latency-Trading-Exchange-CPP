@@ -6,12 +6,19 @@ namespace Exchange{
     MEOrderBook::MEOrderBook(MatchingEngine *matching_engine, TickerId ticker_id, Logger *logger)
         : matching_engine_{matching_engine},
         ticker_id_(ticker_id),
-        logger_(logger) {};
+        logger_(logger) {
+            ask_sentinel_order_.price_ = ME_MAX_PRICE_LEVELS + 1;
+            ask_sentinel_order_.next_order_ = ask_sentinel_order_.prev_order_ = &ask_sentinel_order_;
+            sell_orders[ME_MAX_PRICE_LEVELS + 1].first_order_ = &ask_sentinel_order_;
+            setLevel(ask_levels_, ME_MAX_PRICE_LEVELS + 1);
+            bid_sentinel_order_.price_ = 0;
+            bid_sentinel_order_.next_order_ = bid_sentinel_order_.prev_order_ = &bid_sentinel_order_;
+            buy_orders[0].first_order_ = &bid_sentinel_order_;
+            setLevel(bid_levels_, 0);
+        };
     MEOrderBook::~MEOrderBook(){
         logger_->log("Destroying OrderBook for ticker % at %",ticker_id_ , getCurrentTimeStr(&time_str_));
         matching_engine_ = nullptr;
-        setLevel(ask_levels_,ME_MAX_PRICE_LEVELS + 1);
-        setLevel(bid_levels_,0);
     }
     void MEOrderBook::add(ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept{
         // ToDo - improve
@@ -116,8 +123,8 @@ namespace Exchange{
     // erase all orders at once from a level.
     Qty MEOrderBook::remainingFromMatchingBuy(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{
         auto best_offer = getBestSellOrder();
-        auto tail = best_offer ? best_offer->prev_order_ : nullptr;
-        while(best_offer && best_offer->price_ <= price && qty){
+        auto tail = best_offer->prev_order_;
+        while(best_offer->price_ <= price && qty){
             // START_MEASURE(Exchange_MEOrderBook_match);
             auto fill = std::min(qty,best_offer->qty_);
             qty -= fill;
@@ -154,7 +161,7 @@ namespace Exchange{
                     order_memory_pool_.deallocate(best_offer);
                     findNextSellHead();
                     best_offer = getBestSellOrder();
-                    tail = best_offer ? best_offer->prev_order_ : nullptr;
+                    tail = best_offer->prev_order_;
                 }
                 // There are still left in the level.
                 else{
@@ -171,18 +178,17 @@ namespace Exchange{
             }
             // END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         }
-        if(LIKELY(best_offer)){
-            sell_orders[best_offer->price_].first_order_ = best_offer;
-            best_offer->prev_order_ = tail;
-            tail->next_order_ = best_offer;
-        }
+        // A sentinel order relinks to itself.
+        sell_orders[best_offer->price_].first_order_ = best_offer;
+        best_offer->prev_order_ = tail;
+        tail->next_order_ = best_offer;
         return qty;
     }
     
     Qty MEOrderBook::remainingFromMatchingSell(Price price, Qty qty,ClientId client_id, OrderId client_order_id, OrderId new_market_order_id) noexcept{   
         auto best_offer = getBestBuyOrder();
-        auto tail = best_offer ? best_offer->prev_order_ : nullptr;
-        while(best_offer && best_offer->price_ >= price && qty){
+        auto tail = best_offer->prev_order_;
+        while(best_offer->price_ >= price && qty){
             // START_MEASURE(Exchange_MEOrderBook_match);
             auto fill = std::min(qty,best_offer->qty_);
             qty -= fill;
@@ -219,7 +225,7 @@ namespace Exchange{
                     order_memory_pool_.deallocate(best_offer);
                     findNextBuyHead();
                     best_offer = getBestBuyOrder();
-                    tail = best_offer ? best_offer->prev_order_ : nullptr;
+                    tail = best_offer->prev_order_;
                 }
                 // There are still left in the level.
                 else{
@@ -236,11 +242,10 @@ namespace Exchange{
             }
             // END_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         }
-        if(LIKELY(best_offer)){
-            buy_orders[best_offer->price_].first_order_ = best_offer;
-            best_offer->prev_order_ = tail;
-            tail->next_order_ = best_offer;
-        }
+        // A sentinel order relinks to itself.
+        buy_orders[best_offer->price_].first_order_ = best_offer;
+        best_offer->prev_order_ = tail;
+        tail->next_order_ = best_offer;
         return qty;
     }
 
@@ -272,80 +277,63 @@ namespace Exchange{
         // END_MEASURE(Exchange_MEOrderBook_removeOrder, (*logger_));
     }
         
-    // Preserves head
-    MEOrder* MEOrderBook::eraseSellOrder(MEOrder* order) noexcept {
+    // Removes a cancelled order from its level, keeps the level bits and the head up to date.
+    void MEOrderBook::eraseSellOrder(MEOrder* order) noexcept {
         // remove from client orders.
         client_orders_[order->client_id_][order->client_order_id_] = nullptr;
         auto& level = sell_orders[order->price_];
         // only order left at price
-        MEOrder* next_order;
         if(order->next_order_ == order){
             level.first_order_ = nullptr;
             clearLevel(ask_levels_, order->price_);
-            if(head_of_ask_ == order->price_){findNextSellHead();}
-            next_order = getBestSellOrder();
+            if(UNLIKELY( head_of_ask_== order->price_)){findNextSellHead();}
         }
         else{
-            next_order = order -> next_order_;
-            next_order->prev_order_ = order->prev_order_;
-            order->prev_order_->next_order_ = next_order;
+            order->next_order_->prev_order_ = order->prev_order_;
+            order->prev_order_->next_order_ = order->next_order_;
             if(level.first_order_ == order){
-                level.first_order_ = next_order;
+                level.first_order_ = order->next_order_;
             }
         }
         // deallocate order.
         order_memory_pool_.deallocate(order);
-        return next_order;
     }
-    MEOrder* MEOrderBook::eraseBuyOrder(MEOrder* order) noexcept {
+    void MEOrderBook::eraseBuyOrder(MEOrder* order) noexcept {
         // remove from client orders.
         client_orders_[order->client_id_][order->client_order_id_] = nullptr;
         auto& level = buy_orders[order->price_];
         // only order left at price
-        MEOrder* next_order;
         if(order->next_order_ == order){
             level.first_order_ = nullptr;
             clearLevel(bid_levels_, order->price_);
-            if(head_of_bid_ == order->price_){findNextBuyHead();}
-            next_order = getBestBuyOrder();
+            if(UNLIKELY(head_of_bid_ == order->price_)){findNextBuyHead();}
         }
         else{
-            next_order = order -> next_order_;
-            next_order->prev_order_ = order->prev_order_;
-            order->prev_order_->next_order_ = next_order;
+            order->next_order_->prev_order_ = order->prev_order_;
+            order->prev_order_->next_order_ = order->next_order_;
             if(level.first_order_ == order){
-                level.first_order_ = next_order;
+                level.first_order_ = order->next_order_;
             }
         }
         // deallocate order.
         order_memory_pool_.deallocate(order);
-        return next_order;
     }
 
     //ToDo
     // Linear scan vs bitmap scan
-    // The old head level just emptied, every other ask is above it: the new head is the
-    // lowest set bit. ME_MAX_PRICE_LEVELS + 1 if there are no asks left.
+    // The old head level just emptied, every other ask is above it: the new head is the lowest
+    // set bit from the head's word up. The sentinel ends the search, ME_MAX_PRICE_LEVELS + 1
+    // if there are no asks left.
     inline void MEOrderBook::findNextSellHead() noexcept {
-        //ToDo - improvement
-        // We don't need a for loop here. use head as iterator.
-        for(size_t w = head_of_ask_ / 64; w < ask_levels_.size(); w++){
-            if(ask_levels_[w]){
-                head_of_ask_ = w * 64 + std::countr_zero(ask_levels_[w]) + 1;
-                return;
-            }
-        }
-        head_of_ask_ = ME_MAX_PRICE_LEVELS + 1;
+        size_t w = head_of_ask_ / 64;
+        while(!ask_levels_[w]) w++;
+        head_of_ask_ = w * 64 + std::countr_zero(ask_levels_[w]);
     }
-    // Highest set bit, 0 if there are no bids left.
+    // Every other bid is below the old head: highest set bit from the head's word down, the
+    // sentinel ends the search at 0 if there are no bids left.
     inline void MEOrderBook::findNextBuyHead() noexcept {
-        // (head + 63) / 64 is one past the head's word, w-- makes the head's word the first checked.
-        for(size_t w = (head_of_bid_ + 63) / 64; w-- > 0;){
-            if(bid_levels_[w]){
-                head_of_bid_ = w * 64 + 63 - std::countl_zero(bid_levels_[w]) + 1;
-                return;
-            }
-        }
-        head_of_bid_ = 0;
+        size_t w = head_of_bid_ / 64;
+        while(!bid_levels_[w]) w--;
+        head_of_bid_ = w * 64 + 63 - std::countl_zero(bid_levels_[w]);
     }
 }
