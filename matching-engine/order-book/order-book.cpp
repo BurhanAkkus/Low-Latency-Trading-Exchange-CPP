@@ -10,6 +10,8 @@ namespace Exchange{
     MEOrderBook::~MEOrderBook(){
         logger_->log("Destroying OrderBook for ticker % at %",ticker_id_ , getCurrentTimeStr(&time_str_));
         matching_engine_ = nullptr;
+        setLevel(ask_levels_,ME_MAX_PRICE_LEVELS + 1);
+        setLevel(bid_levels_,0);
     }
     void MEOrderBook::add(ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept{
         // send accepted ClientResponse
@@ -324,6 +326,8 @@ namespace Exchange{
     // The old head level just emptied, every other ask is above it: the new head is the
     // lowest set bit. ME_MAX_PRICE_LEVELS + 1 if there are no asks left.
     inline void MEOrderBook::findNextSellHead() noexcept {
+        //ToDo - improvement
+        // We don't need a for loop here. use head as iterator.
         for(size_t w = head_of_ask_ / 64; w < ask_levels_.size(); w++){
             if(ask_levels_[w]){
                 head_of_ask_ = w * 64 + std::countr_zero(ask_levels_[w]) + 1;
