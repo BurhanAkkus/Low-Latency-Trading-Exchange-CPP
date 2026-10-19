@@ -55,6 +55,19 @@ namespace Exchange{
         }
     };
 
+    struct MDPMarketUpdate {
+        size_t seq_num_ = 0;
+        MEMarketUpdate me_market_update_;
+        auto toString() const {
+        std::stringstream ss;
+        ss << "MDPMarketUpdate"
+            << " ["
+            << " seq:" << seq_num_
+            << " " << me_market_update_.toString()
+            << "]";
+        return ss.str();
+        }
+    };
 #pragma pack(pop)
 using MEMarketUpdateLFQueue = LFQueue<MEMarketUpdate, ME_MAX_MARKET_UPDATES>;
 }
