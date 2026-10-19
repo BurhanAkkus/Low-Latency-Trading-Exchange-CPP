@@ -13,7 +13,9 @@ namespace Exchange{
         ADD = 1,
         MODIFY = 2,
         CANCEL = 3,
-        TRADE = 4
+        TRADE = 4,
+        SNAPSHOT_START = 6,
+        SNAPSHOT_END = 7
     };
     inline std::string marketUpdateTypeToString(MarketUpdateType marketUpdateType) noexcept{
         switch(marketUpdateType){
