@@ -34,9 +34,9 @@ namespace Exchange{
         MatchingEngine &operator=(const MatchingEngine &&) = delete;
         void run() noexcept;
         void processClientRequest(const MEClientRequest* incoming_request) noexcept;
-        void sendClientResponse(const MEClientResponse *client_response) noexcept;
-        void sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
-        void publishOutputs() noexcept;
+        void inline sendClientResponse(const MEClientResponse *client_response) noexcept;
+        void inline sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
+        void inline publishOutputs() noexcept;
     
         private:
         //ToDo

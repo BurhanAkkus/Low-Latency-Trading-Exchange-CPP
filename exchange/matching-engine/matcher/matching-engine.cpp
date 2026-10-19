@@ -57,7 +57,7 @@ namespace Exchange{
             }
         }
 
-    void MatchingEngine::publishOutputs() noexcept{
+    void inline MatchingEngine::publishOutputs() noexcept{
         outgoing_responses_->updateWriteIndex(pending_client_responses_);
         pending_client_responses_ = 0;
         outgoing_market_updates_->updateWriteIndex(pending_market_updates_);
@@ -86,14 +86,14 @@ namespace Exchange{
         }
     }
 
-    void MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
+    void inline MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
         //     __FUNCTION__, Common::getCurrentNanos(),
         //     client_response->toString());
         *outgoing_responses_->getNextWriteTo(pending_client_responses_++) = *client_response;
         // TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
     }
-    void MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
+    void inline MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
         //     __FUNCTION__, Common::getCurrentNanos(),
         //     market_update->toString());
