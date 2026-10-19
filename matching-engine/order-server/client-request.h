@@ -50,6 +50,19 @@ namespace Exchange{
             return ss.str();
         }
     };
+    struct OMClientRequest {
+        size_t seq_num_ = 0;
+        MEClientRequest me_client_request_;
+        auto toString() const {
+        std::stringstream ss;
+        ss << "OMClientRequest"
+            << " ["
+            << "seq:" << seq_num_
+            << " " << me_client_request_.toString()
+            << "]";
+        return ss.str();
+        }
+    };
 #pragma pack(pop)
 using ClientRequestLFQueue = LFQueue<MEClientRequest, ME_MAX_CLIENT_UPDATES>;
 }
