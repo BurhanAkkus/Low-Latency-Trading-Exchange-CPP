@@ -2,8 +2,11 @@
 """Latency report from the RDTSC / TTT lines written by common/perf-utils.h.
 
 Log lines look like:
-    HH:MM:SS.nnnnnnnnn RDTSC <tag> <cycles>      -- START_MEASURE / END_MEASURE
-    HH:MM:SS.nnnnnnnnn TTT   <tag> <epoch nanos> -- TTT_MEASURE
+    <tsc>         RDTSC <tag> <cycles>      -- START_MEASURE / END_MEASURE
+    <epoch nanos> TTT   <tag> <epoch nanos> -- TTT_MEASURE
+
+RDTSC and TTT timestamps are on different clocks, so --skip-first cuts each file by line order:
+one logger writes a file, so its lines are in time order.
 
 RDTSC tags: time spent inside a code block, cycles converted to ns with the TSC frequency.
 TTT hops:   for every event of the later tag, latency = its timestamp minus the most
@@ -44,7 +47,7 @@ PERCENTILES = (50, 90, 99, 99.9)
 # Tags that mark one incoming request, earliest first. Used by --skip-first to count requests.
 REQUEST_TAGS = ("T1_OrderServer_TCP_read", "T3_MatchingEngine_LFQueue_read")
 # Fallback when no request hop is logged: one line per request, logged when it finishes.
-REQUEST_RDTSC_TAG = "Exchange_MatchingEngine_processClientRequest"
+REQUEST_RDTSC_TAG = "ME_req"
 
 
 def detect_tsc_ghz():
@@ -102,44 +105,54 @@ def main():
     if not tsc_ghz:
         sys.exit("could not detect TSC frequency, pass --tsc-ghz")
 
-    rdtsc = defaultdict(list)  # tag -> [(line epoch ns, ns)]
-    ttt = defaultdict(list)    # tag -> [epoch ns]
+    rdtsc = defaultdict(list)  # tag -> [(path, line number, ns)]
+    ttt = defaultdict(list)    # tag -> [(path, line number, epoch ns)]
     for path in files:
         with open(path, errors="replace") as f:
-            for line in f:
+            for line_no, line in enumerate(f):
                 tokens = line.split()
                 if len(tokens) != 4 or tokens[1] not in ("RDTSC", "TTT"):
                     continue
                 try:
-                    line_time = int(tokens[0])
+                    int(tokens[0])
                     value = int(tokens[3])
                 except ValueError:
                     continue
                 if tokens[1] == "RDTSC":
-                    rdtsc[tokens[2]].append((line_time, value / tsc_ghz))
+                    rdtsc[tokens[2]].append((path, line_no, value / tsc_ghz))
                 else:
-                    ttt[tokens[2]].append(value)
+                    ttt[tokens[2]].append((path, line_no, value))
 
     print(f"files: {', '.join(files)}")
     print(f"TSC: {tsc_ghz:.4f} GHz")
 
     # Warm-up: count requests by the earliest hop present, drop everything logged before the (N+1)th.
+    # Each file is cut at its first line logged at or after that request, files without one are kept.
     if args.skip_first:
         request_tag = next((t for t in REQUEST_TAGS if ttt.get(t)), None)
         if request_tag:
-            starts = sorted(ttt[request_tag])
+            starts = sorted(ttt[request_tag], key=lambda x: x[2])
         elif rdtsc.get(REQUEST_RDTSC_TAG):
             request_tag = REQUEST_RDTSC_TAG
-            starts = sorted(t for t, _ in rdtsc[request_tag])
+            starts = rdtsc[request_tag]  # file order is time order
         else:
             sys.exit("--skip-first needs one of " + ", ".join(REQUEST_TAGS + (REQUEST_RDTSC_TAG,)) + " in the logs")
         if args.skip_first >= len(starts):
             sys.exit(f"--skip-first {args.skip_first} skips all {len(starts)} requests")
-        cutoff = starts[args.skip_first]
-        rdtsc = {tag: [x for x in v if x[0] >= cutoff] for tag, v in rdtsc.items()}
-        ttt = {tag: [t for t in v if t >= cutoff] for tag, v in ttt.items()}
+        cut_path, cut_line, cut_time = starts[args.skip_first]
+        first_kept = {cut_path: cut_line}  # path -> first line number kept
+        if request_tag != REQUEST_RDTSC_TAG:
+            # TTT times are epoch nanos on every file: find where each file reaches the cutoff time.
+            for v in ttt.values():
+                for path, line_no, t in v:
+                    if t >= cut_time and line_no < first_kept.get(path, float("inf")):
+                        first_kept[path] = line_no
+        kept = lambda x: x[1] >= first_kept.get(x[0], 0)
+        rdtsc = {tag: [x for x in v if kept(x)] for tag, v in rdtsc.items()}
+        ttt = {tag: [x for x in v if kept(x)] for tag, v in ttt.items()}
         print(f"skipped first {args.skip_first} of {len(starts)} requests ({request_tag})")
-    rdtsc = {tag: [ns for _, ns in v] for tag, v in rdtsc.items() if v}
+    rdtsc = {tag: [ns for _, _, ns in v] for tag, v in rdtsc.items() if v}
+    ttt = {tag: [t for _, _, t in v] for tag, v in ttt.items()}
 
     if rdtsc:
         print_table("Code blocks (RDTSC)", [(tag, summarize(v)) for tag, v in sorted(rdtsc.items())])

@@ -63,7 +63,7 @@ analysis=$(python3 "$REPO/scripts/perf-analysis.py" --skip-first $((requests / 1
 echo "$analysis"
 
 # count mean p50 p90 p99 p99.9 max
-stats=$(awk '$1 == "Exchange_MatchingEngine_processClientRequest" {print $2","$3","$4","$5","$6","$7","$8}' <<< "$analysis")
+stats=$(awk '$1 == "ME_req" {print $2","$3","$4","$5","$6","$7","$8}' <<< "$analysis")
 if [[ -z $stats ]]; then
     echo "no processClientRequest line in the analysis, nothing recorded" >&2
     exit 1

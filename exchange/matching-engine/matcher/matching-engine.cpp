@@ -51,10 +51,10 @@ namespace Exchange{
                 //         __LINE__, __FUNCTION__,
                 //         Common::getCurrentNanos(),
                 //         me_client_request->toString());
-                START_MEASURE(Exchange_MatchingEngine_processClientRequest);
+                START_MEASURE(ME_req);
                 processClientRequest(me_client_request);
                 publishOutputs();
-                END_MEASURE(Exchange_MatchingEngine_processClientRequest, logger_);
+                END_MEASURE(ME_req, logger_);
                 incoming_requests_->updateReadIndex();
                 } else if (stopping) {
                     return;

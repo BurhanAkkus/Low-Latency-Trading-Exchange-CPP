@@ -19,11 +19,15 @@ using namespace Exchange;
 
 namespace {
   struct Config {
-    // At most ME_MAX_CLIENT_UPDATES with no gap, see parseArgs.
     size_t requests = 200'000;
     // 0 sends back to back: the driver is ~3x faster than the engine, so requests queue up and
     // the engine runs with warm caches. The engine keeps up from 1us.
     Nanos interval_ns = 0;
+    // With no gap, after the first burst_requests send one request every paced_ns, about the
+    // engine's per-request time (~110ns). Back to back for the whole run the driver gets more than
+    // the request queue's 262144 ahead of the engine and overwrites requests it hasn't read.
+    size_t burst_requests = 200'000;
+    Nanos paced_ns = 100;
     unsigned seed = 42;
     unsigned cancel_pct = 25;
     // Each client has ME_MAX_ORDER_PER_CLIENT order ids, 16 covers the default requests.
@@ -65,13 +69,6 @@ namespace {
     }
     if (cfg.clients == 0 || cfg.clients >= ME_MAX_NUM_CLIENTS || cfg.cancel_pct > 100) usage(argv[0]);
     if (cfg.price_min < 1 || cfg.price_min > cfg.price_max || cfg.price_max > ME_MAX_PRICE_LEVELS) usage(argv[0]);
-    // With no gap the driver can be the whole run ahead of the engine, and the queue doesn't stop
-    // it from overwriting requests the engine hasn't read. A run that fits in the queue can't.
-    if (cfg.interval_ns == 0 && cfg.requests > ME_MAX_CLIENT_UPDATES) {
-      std::cerr << "--interval-us 0 needs --requests <= " << ME_MAX_CLIENT_UPDATES
-                << ", more would overwrite requests the engine hasn't read.\n";
-      std::exit(EXIT_FAILURE);
-    }
     return cfg;
   }
 }
@@ -119,7 +116,10 @@ int main(int argc, char** argv) {
     }
 
     // Spin until the send time, sleep_for overshoots by tens of microseconds.
-    next_send += cfg.interval_ns;
+    const bool paced = cfg.interval_ns == 0 && i >= cfg.burst_requests;
+    // The paced schedule starts now, the burst has left next_send far behind.
+    if (paced && i == cfg.burst_requests) next_send = getCurrentNanos();
+    next_send += paced ? cfg.paced_ns : cfg.interval_ns;
     while (getCurrentNanos() < next_send) {}
 
     *requests.getNextWriteTo() = request;

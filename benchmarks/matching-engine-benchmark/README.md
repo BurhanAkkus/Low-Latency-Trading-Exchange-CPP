@@ -59,8 +59,8 @@ GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R <repo>/exchange/matching-engine
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--requests N` | 200000 | number of requests to send, at most 262144 with `--interval-us 0` |
-| `--interval-us N` | 0 | time between requests, 0 sends them back to back |
+| `--requests N` | 200000 | number of requests to send |
+| `--interval-us N` | 0 | time between requests, 0 sends the first 200000 back to back and the rest every 100 ns |
 | `--seed N` | 42 | random seed, same seed = same request stream |
 | `--cancel-pct N` | 25 | % of requests that cancel an earlier order (may already be filled → `CANCEL_REJECTED`) |
 | `--clients N` | 16 | number of clients, each has `ME_MAX_ORDER_PER_CLIENT` order ids |
@@ -80,17 +80,20 @@ The default price range is the whole book: a sparse book where price levels are 
 finding the next best price after a level empties has to skip many empty levels. A narrow
 range such as `--price-min 101 --price-max 110` gives a dense book where levels are adjacent.
 
-By default requests are sent back to back. The driver is ~3× faster than the engine (~40 ns vs
-~110 ns per request), so requests queue up and the engine processes them one after another with
-warm caches: p50 is ~30 ns lower than for a request arriving at an idle engine
-(`--interval-us 10`). The engine keeps up from `--interval-us 1`. Compare runs with the same
-interval.
+By default requests are sent back to back. The driver is ~3× faster than the engine (~35 ns vs
+~100 ns per request), so requests queue up and the engine processes them one after another with
+warm caches, which measures lower than a request arriving at an idle engine
+(`--interval-us 10`). The engine keeps up from `--interval-us 1`.
 
-With no gap the driver can get the whole run ahead of the engine, and the queue doesn't stop it
-from overwriting requests the engine hasn't read yet. The log would still show one measurement
-per request. So `--interval-us 0` is limited to `--requests` ≤ 262144 (`ME_MAX_CLIENT_UPDATES`),
-a run that fits in the queue can't overwrite. A run takes `requests × interval` plus ~2.5 s to
-set up.
+Back to back for a whole long run, the driver would get more than the request queue's 262144
+ahead of the engine, and the queue doesn't stop it from overwriting requests the engine hasn't
+read yet. The log would still show one measurement per request. So with no gap only the first
+200000 requests go back to back, the rest are sent every 100 ns, about the engine's per-request
+time (`burst_requests` and `paced_ns` in the benchmark's `Config`). In a 1M request run the
+driver stayed under ~110k requests ahead. A paced request is read right after the driver wrote
+it, and measures higher than one from the back to back burst (p50 ~90 vs ~55 ns), so runs with
+more than 200000 requests mix the two: compare runs with the same `--requests` and interval.
+A run takes `requests × interval` plus ~2.5 s to set up.
 
 Short runs see fewer interrupts and look better at the tail: compare runs of the same length.
 
@@ -138,7 +141,7 @@ numbers as the code's absolute cost.
 | `dirty` | `yes` if the engine code (`common/`, `exchange/` and the benchmark driver) had uncommitted changes |
 | `changes` | fingerprint of those changes: rows with the same commit and fingerprint ran the same code |
 | `options` | the options passed to the benchmark |
-| `count` ... `max` | `processClientRequest` stats in ns, after skipping the first 10% |
+| `count` ... `max` | `ME_req` (`processClientRequest` + `publishOutputs`) stats in ns, after skipping the first 10% |
 
   Set `BENCH_RESULTS=<file>` to record somewhere else, e.g. for experiments you don't want in
   the history. A run with `BENCH_BIN` set isn't rebuilt, its row notes the binary.
