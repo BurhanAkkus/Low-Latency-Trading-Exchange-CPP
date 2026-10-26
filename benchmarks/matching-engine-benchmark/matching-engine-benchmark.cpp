@@ -1,8 +1,9 @@
 // Matching engine latency benchmark.
 // Stands in for the order server: pushes a reproducible stream of random NEW/CANCEL requests
-// straight into the matching engine's request queue at a fixed rate, and drains the response
-// and market update queues. The engine logs RDTSC/TTT measurements to
-// exchange_matching_engine.log in the current directory, analyse with scripts/perf-analysis.py.
+// straight into the matching engine's request queue, back to back by default. Nothing reads the
+// response and market update queues, the engine overwrites them. The engine logs RDTSC/TTT
+// measurements to exchange_matching_engine.log in the current directory, analyse with
+// scripts/perf-analysis.py.
 //
 // Measures T3 (engine reads request) -> T4/T4t (engine writes output).
 #include <array>
@@ -18,10 +19,11 @@ using namespace Exchange;
 
 namespace {
   struct Config {
-    size_t requests = 500'000;
-    // Keep this above the engine's per request time, otherwise requests queue up behind each
-    // other. The engine's p99.9 is ~5us today, below ~2us it is saturated.
-    Nanos interval_ns = 10 * NANOS_TO_MICROS;
+    // At most ME_MAX_CLIENT_UPDATES with no gap, see parseArgs.
+    size_t requests = 200'000;
+    // 0 sends back to back: the driver is ~3x faster than the engine, so requests queue up and
+    // the engine runs with warm caches. The engine keeps up from 1us.
+    Nanos interval_ns = 0;
     unsigned seed = 42;
     unsigned cancel_pct = 25;
     // Each client has ME_MAX_ORDER_PER_CLIENT order ids, 16 covers the default requests.
@@ -63,6 +65,13 @@ namespace {
     }
     if (cfg.clients == 0 || cfg.clients >= ME_MAX_NUM_CLIENTS || cfg.cancel_pct > 100) usage(argv[0]);
     if (cfg.price_min < 1 || cfg.price_min > cfg.price_max || cfg.price_max > ME_MAX_PRICE_LEVELS) usage(argv[0]);
+    // With no gap the driver can be the whole run ahead of the engine, and the queue doesn't stop
+    // it from overwriting requests the engine hasn't read. A run that fits in the queue can't.
+    if (cfg.interval_ns == 0 && cfg.requests > ME_MAX_CLIENT_UPDATES) {
+      std::cerr << "--interval-us 0 needs --requests <= " << ME_MAX_CLIENT_UPDATES
+                << ", more would overwrite requests the engine hasn't read.\n";
+      std::exit(EXIT_FAILURE);
+    }
     return cfg;
   }
 }
@@ -111,11 +120,7 @@ int main(int argc, char** argv) {
 
     // Spin until the send time, sleep_for overshoots by tens of microseconds.
     next_send += cfg.interval_ns;
-    while (getCurrentNanos() < next_send) {
-      // Nobody consumes engine output yet, drain it so the queues don't wrap around.
-      while (responses.getNextReadTo()) responses.updateReadIndex();
-      while (updates.getNextReadTo()) updates.updateReadIndex();
-    }
+    while (getCurrentNanos() < next_send) {}
 
     *requests.getNextWriteTo() = request;
     requests.updateWriteIndex();

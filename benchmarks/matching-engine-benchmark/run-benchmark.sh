@@ -48,7 +48,7 @@ fi
 [[ -n ${BENCH_BIN:-} ]] && changes="$changes (BENCH_BIN=$BENCH_BIN)"
 
 # Skip the first 10% of requests as warm-up.
-requests=500000
+requests=200000
 args=("$@")
 for ((i = 0; i + 1 < ${#args[@]}; i++)); do
     [[ ${args[i]} == --requests ]] && requests=${args[i + 1]}
