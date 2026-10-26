@@ -24,11 +24,13 @@ namespace Common{
         // On the heap: the log queue is 128 MB and queues are often local variables.
         std::vector<T> store_;
         // Counters only grow, slot = counter & MASK. Each is written by one thread only, so
-        // updates are plain release stores, no atomic read-modify-write.
+        // updates are plain stores, no atomic read-modify-write.
+        // next_to_write_ is atomic, its release store publishes the slots to the consumer.
+        // next_to_read_ is plain, only the consumer reads or writes it.
         // Producer and consumer data on separate cache lines, otherwise every write
         // invalidates the line the other thread is reading.
         alignas(CACHE_LINE_SIZE) std::atomic<size_t> next_to_write_{0};
-        alignas(CACHE_LINE_SIZE) std::atomic<size_t> next_to_read_{0};
+        alignas(CACHE_LINE_SIZE) size_t next_to_read_{0};
         // Consumer's last seen next_to_write_, reloaded only when the consumer catches up to it,
         // so draining a batch doesn't pull the producer's cache line on every read.
         mutable size_t cached_write_ = 0;
@@ -54,24 +56,15 @@ namespace Common{
 
         // Consumer.
         auto getNextReadTo() const noexcept -> const T*{
-            const auto read = next_to_read_.load(std::memory_order_relaxed);
-            if (read == cached_write_) {
+            if (next_to_read_ == cached_write_) {
                 cached_write_ = next_to_write_.load(std::memory_order_acquire);
-                if (read == cached_write_) return nullptr;
+                if (next_to_read_ == cached_write_) return nullptr;
             }
-            return &store_[read & MASK];
+            return &store_[next_to_read_ & MASK];
         }
         auto updateReadIndex() noexcept{
-            const auto read = next_to_read_.load(std::memory_order_relaxed);
-            ASSERT(read != cached_write_, "Read an invalid element.");
-            next_to_read_.store(read + 1, std::memory_order_release);
-        }
-
-        // Either thread.
-        auto size() const noexcept{
-            // Load read first: it never passes write, so the difference can't underflow.
-            const auto read = next_to_read_.load(std::memory_order_acquire);
-            return next_to_write_.load(std::memory_order_acquire) - read;
+            ASSERT(next_to_read_ != cached_write_, "Read an invalid element.");
+            next_to_read_++;
         }
     };
 }

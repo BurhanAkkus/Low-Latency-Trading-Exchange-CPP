@@ -39,7 +39,10 @@ namespace Exchange{
     void MatchingEngine::run() noexcept {
             logger_.log("%:% %() %\n", __FILE__, __LINE__,
                 __FUNCTION__, Common::getCurrentTimeStr(&time_str_));
-            while (run_) {
+            while (true) {
+                // Read run_ before the queue: once it reads false, an empty queue means every
+                // request queued before stop() has been processed.
+                const bool stopping = !run_;
                 const auto me_client_request =
                     incoming_requests_->getNextReadTo();
                 if (LIKELY(me_client_request)) {
@@ -53,6 +56,8 @@ namespace Exchange{
                 publishOutputs();
                 END_MEASURE(Exchange_MatchingEngine_processClientRequest, logger_);
                 incoming_requests_->updateReadIndex();
+                } else if (stopping) {
+                    return;
                 }
             }
         }

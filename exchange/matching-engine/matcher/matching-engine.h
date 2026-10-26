@@ -44,7 +44,7 @@ namespace Exchange{
         ClientRequestLFQueue* incoming_requests_ = nullptr;
         ClientResponseLFQueue* outgoing_responses_ = nullptr;
         MEMarketUpdateLFQueue* outgoing_market_updates_ = nullptr;
-        volatile bool run_ = false;
+        std::atomic<bool> run_{false};
         Logger logger_;
         std::string time_str_;
         std::thread* thread_ = nullptr;

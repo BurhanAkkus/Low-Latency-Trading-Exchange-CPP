@@ -41,7 +41,10 @@ namespace Common{
         size_t pending_ = 0;
 
         auto flushQueue() noexcept {
-            while (running_) {
+            while (true) {
+            // Read running_ before draining: once it reads false, this drain sees everything
+            // logged before ~Logger cleared it, so nothing is left in the queue.
+            const bool stopping = !running_;
             for (auto next = log_q_.getNextReadTo(); next; next = log_q_.getNextReadTo()) {
                 switch (next->type_) {
                 case LOG_TYPE::CHAR: os_ << next->u_.c; break;
@@ -57,6 +60,7 @@ namespace Common{
                 }
                 log_q_.updateReadIndex();
             }
+            if (stopping) return;
             using namespace std::literals::chrono_literals;
             std::this_thread::sleep_for(1ms);
             }
@@ -147,10 +151,6 @@ namespace Common{
 
         ~Logger(){
             std::cout << "Flushing and Closing logging thread: " + file_name_<< std::endl;
-            while(log_q_.size() > 0){
-                using namespace std::literals::chrono_literals;
-                std::this_thread::sleep_for(1ms);
-            };
             running_ = false;
             logger_thread_->join();
             delete logger_thread_;

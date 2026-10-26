@@ -121,8 +121,7 @@ int main(int argc, char** argv) {
     requests.updateWriteIndex();
   }
 
-  // Let the engine finish the last requests, then shut down (joins the engine thread).
-  while (requests.size()) {}
+  // The engine processes the requests still queued, then its thread is joined.
   delete matching_engine;
   std::cout << "done, analyse with: python3 scripts/perf-analysis.py exchange_matching_engine.log --skip-first N"
             << std::endl;
