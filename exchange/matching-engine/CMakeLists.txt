@@ -12,8 +12,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -Wpedantic")
 set(CMAKE_VERBOSE_MAKEFILE on)
 
 # Headers are included relative to the repo root, e.g. "common/types.h" and
-# "matching-engine/market-data/market-update.h".
-set(REPO_ROOT ${PROJECT_SOURCE_DIR}/..)
+# "exchange/market-data/market-update.h".
+set(REPO_ROOT ${PROJECT_SOURCE_DIR}/../..)
 
 add_library(libcommon STATIC
     ${REPO_ROOT}/common/tcp-server.cpp

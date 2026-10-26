@@ -18,7 +18,7 @@ namespace Exchange{
                  }
             };
     MatchingEngine::~MatchingEngine(){
-        run_ = false;
+        stop();
         if (thread_) { thread_->join(); delete thread_; thread_ = nullptr;}
         for(auto& order_book : ticker_order_book_) {
             delete order_book;
@@ -29,20 +29,19 @@ namespace Exchange{
         outgoing_market_updates_ = nullptr;
     }
     auto MatchingEngine::start(int core_id) -> void {
-        run_ = true;
         thread_ = Common::createAndStartThread(core_id, "Exchange/MatchingEngine", [this]() { run(); });
         ASSERT(thread_ != nullptr, "Failed to start MatchingEngine thread.");
     }
+    // The engine thread processes the requests already queued, then run() returns.
     auto MatchingEngine::stop() -> void {
-        run_ = false;
+        incoming_requests_->stop();
     }
+    // Sleeps while there are no requests, returns once incoming_requests_ is stopped and drained.
     void MatchingEngine::run() noexcept {
             logger_.log("%:% %() %\n", __FILE__, __LINE__,
                 __FUNCTION__, Common::getCurrentTimeStr(&time_str_));
-            while (run_) {
-                const auto me_client_request =
-                    incoming_requests_->getNextReadTo();
-                if (LIKELY(me_client_request)) {
+            for (auto me_client_request = incoming_requests_->getNextReadTo(); me_client_request;
+                    me_client_request = incoming_requests_->getNextReadTo()) {
                 // TTT_MEASURE(T3_MatchingEngine_LFQueue_read, logger_);
                 // logger_.log("%:% %() % Processing %\n", __FILE__,
                 //         __LINE__, __FUNCTION__,
@@ -53,7 +52,6 @@ namespace Exchange{
                 publishOutputs();
                 END_MEASURE(Exchange_MatchingEngine_processClientRequest, logger_);
                 incoming_requests_->updateReadIndex();
-                }
             }
         }
 
@@ -84,21 +82,6 @@ namespace Exchange{
                 FATAL("Received INVALID client request!!");
             return;
         }
-    }
-
-    void inline MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
-        // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
-        //     __FUNCTION__, Common::getCurrentNanos(),
-        //     client_response->toString());
-        *outgoing_responses_->getNextWriteTo(pending_client_responses_++) = *client_response;
-        // TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
-    }
-    void inline MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
-        // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
-        //     __FUNCTION__, Common::getCurrentNanos(),
-        //     market_update->toString());
-        *outgoing_market_updates_->getNextWriteTo( pending_market_updates_++) = *market_update;
-        // TTT_MEASURE(T4_MatchingEngine_LFQueue_write, logger_);
     }
 
 }

@@ -6,11 +6,11 @@
 #include "common/perf-utils.h"
 #include "common/thread-utils.h"
 #include "common/lf-queue.h"
-#include "matching-engine/market-data/market-update.h"
-#include "matching-engine/order-server/client-request.h"
-#include "matching-engine/order-server/client-response.h"
-#include "matching-engine/matcher/me-order.h"
-#include "matching-engine/order-book/order-book.h"
+#include "exchange/market-data/market-update.h"
+#include "exchange/order-server/client-request.h"
+#include "exchange/order-server/client-response.h"
+#include "exchange/matching-engine/matcher/me-order.h"
+#include "exchange/matching-engine/order-book/order-book.h"
 
 using namespace Common;
 
@@ -44,7 +44,6 @@ namespace Exchange{
         ClientRequestLFQueue* incoming_requests_ = nullptr;
         ClientResponseLFQueue* outgoing_responses_ = nullptr;
         MEMarketUpdateLFQueue* outgoing_market_updates_ = nullptr;
-        volatile bool run_ = false;
         Logger logger_;
         std::string time_str_;
         std::thread* thread_ = nullptr;
@@ -53,5 +52,20 @@ namespace Exchange{
         size_t pending_market_updates_{0};
     };
 
+    // Defined in the header so the order book can inline them.
+    void inline MatchingEngine::sendClientResponse(const MEClientResponse *client_response) noexcept {
+        // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
+        //     __FUNCTION__, Common::getCurrentNanos(),
+        //     client_response->toString());
+        *outgoing_responses_->getNextWriteTo(pending_client_responses_++) = *client_response;
+        // TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
+    }
+    void inline MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
+        // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
+        //     __FUNCTION__, Common::getCurrentNanos(),
+        //     market_update->toString());
+        *outgoing_market_updates_->getNextWriteTo( pending_market_updates_++) = *market_update;
+        // TTT_MEASURE(T4_MatchingEngine_LFQueue_write, logger_);
+    }
 
 }

@@ -29,6 +29,10 @@ namespace Exchange{
                 return "CANCEL";
             case MarketUpdateType::TRADE:
                 return "TRADE";
+            case MarketUpdateType::SNAPSHOT_START:
+                return "SNAPSHOT_START";
+            case MarketUpdateType::SNAPSHOT_END:
+                return "SNAPSHOT_END";
         }
         return "UNKNOWN";
     }

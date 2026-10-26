@@ -6,9 +6,9 @@
 #include "common/logging.h"
 #include "common/memory-pool.h"
 #include "common/perf-utils.h"
-#include "matching-engine/matcher/me-order.h"
-#include "matching-engine/order-server/client-response.h"
-#include "matching-engine/market-data/market-update.h"
+#include "exchange/matching-engine/matcher/me-order.h"
+#include "exchange/order-server/client-response.h"
+#include "exchange/market-data/market-update.h"
 #include <array>
 #include <bit>
 using namespace Common;

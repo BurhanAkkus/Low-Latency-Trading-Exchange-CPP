@@ -19,14 +19,14 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-BUILD=$REPO/matching-engine/cmake-build-release
+BUILD=$REPO/exchange/matching-engine/cmake-build-release
 BIN=${BENCH_BIN:-$BUILD/matching_engine_benchmark}
 DIR=${BENCH_DIR:-/tmp/me-bench}
 RESULTS=${BENCH_RESULTS:-$HERE/results.csv}
 
 # Rebuild, so the binary matches the code the row says it ran.
 if [[ -z ${BENCH_BIN:-} ]]; then
-    [[ -d $BUILD ]] || cmake -S "$REPO/matching-engine" -B "$BUILD" > /dev/null
+    [[ -d $BUILD ]] || cmake -S "$REPO/exchange/matching-engine" -B "$BUILD" > /dev/null
     cmake --build "$BUILD" -j --target matching_engine_benchmark > /dev/null
 fi
 if [[ ! -x $BIN ]]; then
@@ -35,8 +35,8 @@ if [[ ! -x $BIN ]]; then
 fi
 
 # The code the benchmark is built from, results.csv itself is left out.
-code=(common matching-engine/matcher matching-engine/order-book matching-engine/order-server
-      matching-engine/market-data benchmarks/matching-engine-benchmark/matching-engine-benchmark.cpp)
+code=(common exchange/matching-engine/matcher exchange/matching-engine/order-book exchange/order-server
+      exchange/market-data benchmarks/matching-engine-benchmark/matching-engine-benchmark.cpp)
 commit=$(git -C "$REPO" rev-parse --short HEAD)
 if git -C "$REPO" diff --quiet HEAD -- "${code[@]}"; then
     dirty=no

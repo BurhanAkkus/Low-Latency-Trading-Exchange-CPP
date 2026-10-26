@@ -35,13 +35,12 @@ namespace Common{
         std::ofstream os_;
         const std::string file_name_;
         LFQueue<LogElement, LOG_QUEUE_SIZE> log_q_;
-        std::atomic<bool> running_= {true};
         std::thread * logger_thread_ = nullptr;
         // Elements written by the current log() call but not published yet. Producer only.
         size_t pending_ = 0;
 
+        // Sleeps while the queue is empty, returns once log_q_ is stopped and drained.
         auto flushQueue() noexcept {
-            while (running_) {
             for (auto next = log_q_.getNextReadTo(); next; next = log_q_.getNextReadTo()) {
                 switch (next->type_) {
                 case LOG_TYPE::CHAR: os_ << next->u_.c; break;
@@ -56,9 +55,6 @@ namespace Common{
                 case LOG_TYPE::STRING: os_.write(next->u_.s, strnlen(next->u_.s, sizeof(next->u_.s))); break;
                 }
                 log_q_.updateReadIndex();
-            }
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(1ms);
             }
         }
 
@@ -147,11 +143,8 @@ namespace Common{
 
         ~Logger(){
             std::cout << "Flushing and Closing logging thread: " + file_name_<< std::endl;
-            while(log_q_.size() > 0){
-                using namespace std::literals::chrono_literals;
-                std::this_thread::sleep_for(1ms);
-            };
-            running_ = false;
+            // The logger thread writes out what is left in the queue, then returns.
+            log_q_.stop();
             logger_thread_->join();
             delete logger_thread_;
             os_.close();

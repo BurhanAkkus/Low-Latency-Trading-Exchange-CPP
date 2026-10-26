@@ -22,8 +22,9 @@ using MyQueue = LFQueue<MyStruct, 32>; // capacity must be a power of two.
 auto ProducerFunction(MyQueue* q){
     for(int i = 0; i < 20; i++){
         auto w = q->getNextWriteTo();
-        q->updateWriteIndex();
+        // Fill the slot before publishing it, the consumer may read it as soon as it is published.
         *w = MyStruct{i,i*10,i*100};
+        q->updateWriteIndex();
         std::cout << "Wrote new MyStruct(" << *w << ") to: " << w << std::endl; 
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(0.1s);

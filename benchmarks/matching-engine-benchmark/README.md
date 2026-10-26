@@ -19,12 +19,12 @@ The benchmark is built by the CMake project in `matching-engine/` (Release, `-O3
 From the repo root:
 
 ```bash
-cd matching-engine
+cd exchange/matching-engine
 cmake -B cmake-build-release
 cmake --build cmake-build-release -j --target matching_engine_benchmark
 ```
 
-`matching-engine/build.sh` builds everything (Release, Ninja) into the same directory.
+`exchange/matching-engine/build.sh` builds everything (Release, Ninja) into the same directory.
 
 ## 2. Prepare the machine
 
@@ -53,7 +53,7 @@ To run the binary by hand instead:
 
 ```bash
 mkdir -p /tmp/me-bench && cd /tmp/me-bench && rm -f *.log
-GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R <repo>/matching-engine/cmake-build-release/matching_engine_benchmark
+GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R <repo>/exchange/matching-engine/cmake-build-release/matching_engine_benchmark
 ```
 
 | Option | Default | Meaning |
