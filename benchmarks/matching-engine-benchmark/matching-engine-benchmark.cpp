@@ -84,15 +84,6 @@ int main(int argc, char** argv) {
   auto matching_engine = new MatchingEngine(&requests, &responses, &updates, cfg.logger_core);
   matching_engine->start(cfg.engine_core);
 
-  // Nobody consumes engine output yet, drain it so the queues don't wrap around.
-  // Each drainer sleeps while its queue is empty and returns once the queue is stopped and drained.
-  auto drain = [](auto* q) {
-    for (auto next = q->getNextReadTo(); next; next = q->getNextReadTo()) q->updateReadIndex();
-  };
-  auto responses_drainer = createAndStartThread(-1, "Benchmark/DrainResponses", drain, &responses);
-  auto updates_drainer = createAndStartThread(-1, "Benchmark/DrainUpdates", drain, &updates);
-  ASSERT(responses_drainer && updates_drainer, "Failed to start drain threads.");
-
   // random trading client.
   std::mt19937 rng(cfg.seed);
   std::array<OrderId, ME_MAX_NUM_CLIENTS> next_order_id{};
@@ -120,19 +111,19 @@ int main(int argc, char** argv) {
 
     // Spin until the send time, sleep_for overshoots by tens of microseconds.
     next_send += cfg.interval_ns;
-    while (getCurrentNanos() < next_send) {}
+    while (getCurrentNanos() < next_send) {
+      // Nobody consumes engine output yet, drain it so the queues don't wrap around.
+      while (responses.getNextReadTo()) responses.updateReadIndex();
+      while (updates.getNextReadTo()) updates.updateReadIndex();
+    }
 
     *requests.getNextWriteTo() = request;
     requests.updateWriteIndex();
   }
 
-  // The engine processes the requests still queued, then its thread is joined.
+  // Let the engine finish the last requests, then shut down (joins the engine thread).
+  while (requests.size()) {}
   delete matching_engine;
-  // The engine has published everything, the drainers empty the queues and return.
-  responses.stop();
-  updates.stop();
-  responses_drainer->join(); delete responses_drainer;
-  updates_drainer->join(); delete updates_drainer;
   std::cout << "done, analyse with: python3 scripts/perf-analysis.py exchange_matching_engine.log --skip-first N"
             << std::endl;
   return EXIT_SUCCESS;

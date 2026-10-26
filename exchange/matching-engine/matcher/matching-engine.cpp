@@ -18,7 +18,7 @@ namespace Exchange{
                  }
             };
     MatchingEngine::~MatchingEngine(){
-        stop();
+        run_ = false;
         if (thread_) { thread_->join(); delete thread_; thread_ = nullptr;}
         for(auto& order_book : ticker_order_book_) {
             delete order_book;
@@ -29,19 +29,20 @@ namespace Exchange{
         outgoing_market_updates_ = nullptr;
     }
     auto MatchingEngine::start(int core_id) -> void {
+        run_ = true;
         thread_ = Common::createAndStartThread(core_id, "Exchange/MatchingEngine", [this]() { run(); });
         ASSERT(thread_ != nullptr, "Failed to start MatchingEngine thread.");
     }
-    // The engine thread processes the requests already queued, then run() returns.
     auto MatchingEngine::stop() -> void {
-        incoming_requests_->stop();
+        run_ = false;
     }
-    // Sleeps while there are no requests, returns once incoming_requests_ is stopped and drained.
     void MatchingEngine::run() noexcept {
             logger_.log("%:% %() %\n", __FILE__, __LINE__,
                 __FUNCTION__, Common::getCurrentTimeStr(&time_str_));
-            for (auto me_client_request = incoming_requests_->getNextReadTo(); me_client_request;
-                    me_client_request = incoming_requests_->getNextReadTo()) {
+            while (run_) {
+                const auto me_client_request =
+                    incoming_requests_->getNextReadTo();
+                if (LIKELY(me_client_request)) {
                 // TTT_MEASURE(T3_MatchingEngine_LFQueue_read, logger_);
                 // logger_.log("%:% %() % Processing %\n", __FILE__,
                 //         __LINE__, __FUNCTION__,
@@ -52,6 +53,7 @@ namespace Exchange{
                 publishOutputs();
                 END_MEASURE(Exchange_MatchingEngine_processClientRequest, logger_);
                 incoming_requests_->updateReadIndex();
+                }
             }
         }
 
