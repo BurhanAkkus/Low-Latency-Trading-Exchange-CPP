@@ -61,8 +61,9 @@ flowchart LR
 ```
 
 Solid boxes are built, dashed ones are planned. Every queue is single-producer, single-consumer,
-and each thread is pinned to its own core. Until the order server is finished, the benchmark driver
-stands in for it.
+and each thread is pinned to its own core. Until the order server and market data publisher are
+finished, the benchmark stands in for them: its driver sends requests and reads the responses like
+the order server, and a thread on its own core reads the market updates.
 
 **Order book.** One per instrument. Each side is an array of price levels indexed directly by price,
 with a sentinel level at each end. Each level is a circular doubly linked list of orders in arrival
@@ -83,7 +84,9 @@ and the bitmap search always finds a bit.
 by both threads: the producer publishes with a release store and the consumer reads it with an
 acquire load. The consumer caches the last write index it saw and only rereads it when it catches
 up, so draining a batch doesn't pull the producer's cache line on every element. The producer can
-fill several slots and publish them with one store.
+fill several slots and publish them with one store. A full queue makes the producer wait
+(backpressure). The producer likewise caches the read index and only rereads it when the queue
+looks full, and waits with `pause` between checks.
 
 **Publishing.** The engine stages all responses and market updates for a request and publishes each
 queue once per request. A fill produces 2 responses and 2 market updates.
@@ -148,6 +151,8 @@ phase.
 - One RDTSC measurement per request, around processing and publishing, written to the engine's log
   through the asynchronous logger. `scripts/perf-analysis.py` converts cycles to nanoseconds using
   the TSC frequency from the kernel log and prints count, mean and percentiles.
+- Throughput is measured by the benchmark driver, with no code in the engine: the time from the
+  first request sent to the last request's responded, divided by the number of requests.
 - The per-block measurements (`add`, `cancel`, `match`, ...) and the queue hop timestamps are
   commented out in the code. They can be turned back on for a closer look, at the logging cost above.
 - `run-benchmark.sh` rebuilds, runs with a fixed memory layout, analyses the log and appends a row to
@@ -168,13 +173,14 @@ cmake --build cmake-build-release -j   # builds exchange_main and matching_engin
 Run the benchmark, analyse it and record the result, from the repo root:
 
 ```bash
+sudo benchmarks/matching-engine-benchmark/prepare-machine.sh   # once per boot, pins the uncore clock
 benchmarks/matching-engine-benchmark/run-benchmark.sh
 benchmarks/matching-engine-benchmark/run-benchmark.sh --price-min 101 --price-max 110   # dense book
 ```
 
-The default cores (engine 4, logger 6, driver 8) fit an i7-14650HX. On another machine, pick three
-different physical cores with `--engine-core`, `--logger-core` and `--driver-core`, or pass `-1` to
-leave a thread unpinned. If the kernel log isn't readable, run `scripts/perf-analysis.py` by hand
+The default cores (engine 4, logger 6, driver 8, market data publisher stand-in 10) fit an
+i7-14650HX. On another machine, pick four different physical cores with `--engine-core`,
+`--logger-core`, `--driver-core` and `--mdp-core`, or pass `-1` to leave a thread unpinned. If the kernel log isn't readable, run `scripts/perf-analysis.py` by hand
 with `--tsc-ghz`. All options and how to prepare the machine are in the
 [benchmark README](benchmarks/matching-engine-benchmark/README.md).
 
@@ -197,8 +203,9 @@ ToDo.txt                               planned compiler and hardware experiments
 
 ## Limitations
 
-- The queues don't apply backpressure. A producer that laps its consumer overwrites entries that
-  haven't been read. The benchmark paces itself to stay inside the request queue's 262,144 slots.
+- The order server and market data publisher are stand-ins in the benchmark. They read the
+  engine's output queues with a 16 µs busy wait per loop for their syscalls, an estimate, and the
+  numbers depend on it.
 - Prices are not validated before they reach the order book. A price outside 1-256 would index past
   the level arrays or match a sentinel.
 - The price range is fixed at 256 ticks per instrument, with 8 instruments.
@@ -216,7 +223,7 @@ ToDo.txt                               planned compiler and hardware experiments
   market updates.
 - Restructure the `[client][order id]` array, which is 128 MiB per order book and mostly empty,
   into a smaller order index, and measure the change against the p99.9 tail.
-- Price validation and backpressure.
+- Price validation.
 - The compiler and hardware experiments in [`ToDo.txt`](ToDo.txt).
 
 ## Credits

@@ -9,15 +9,16 @@ All values are nanoseconds.
 
 ## Current result
 
-Commit `6aa4733`, one run, default settings (below):
+Commit `2930952`, 5 runs, default settings (below), median [range]:
 
-| | mean | p50 | p90 | p99 | p99.9 | max |
-|---|---|---|---|---|---|---|
-| `processClientRequest` | 109 | 84 | 164 | 314 | 3,747 | 25,422 |
+| | p50 | p90 | p99 | p99.9 | throughput |
+|---|---|---|---|---|---|
+| `processClientRequest` | 90 [90-95] | 171 [170-191] | 288 [286-318] | 412 [403-466] | 131.4 [131.0-141.3] ns/request |
 
 `processClientRequest` is the time from the engine reading a request off its queue to having
 written and published every response and market update for it. It is the only measurement
-left in the hot path, see [what is measured](#what-is-measured).
+left in the hot path, see [what is measured](#what-is-measured). Throughput is the engine's
+whole loop per request, measured by the driver.
 
 ## Setup
 
@@ -60,20 +61,24 @@ pinning made the engine ~5-8 ns per request faster at a tight consumer loop and 
 The script also checks the isolation, AC power, power profile and turbo, and warns about what
 differs.
 
-**Workload** (benchmark defaults since `9bf8326`):
+**Workload** (benchmark defaults since `2930952`):
 
 | Setting | Value |
 |---|---|
-| requests | 500,000, first 50,000 skipped as warm-up |
-| interval | 10 µs between requests (100k requests/s) |
+| requests | 500,000, first 50,000 results skipped as warm-up |
+| sending | back to back, at most 131,072 unfinished requests queued: the engine never waits for a request |
+| consumers | the driver reads the client responses like the order server, a thread on CPU 10 reads the market updates like the market data publisher. Each loop of theirs has a 16 µs busy wait standing in for their syscalls |
 | prices | uniform in 1-256: the whole book, sparse levels |
 | quantity | 1-100 |
 | cancels | 25% of requests cancel a random earlier order (most are already filled → `CANCEL_REJECTED`) |
 | clients / tickers | 16 / 8 |
 | seed | 42: every run sends the identical request stream |
 
-The driver polls the engine's output queues continuously while it waits to send the next
-request, like the order server and market data publisher will.
+The consumers' loop time changes the results a lot: every cache line they read while the engine
+is still writing it has to move back to the engine. Sweeping it from 0 to 16 µs took throughput
+from ~215 to ~131 ns per request, flattening out at the end (8 -> 16 µs: 3%). 16 µs is where the
+exact value matters least, and about an order server loop with recv/send on 16 sockets. That is
+an estimate: revisit it once the real components exist.
 
 **Run settings** for comparisons (since the noise investigation, see [noise](#noise)), as
 [`run-benchmark.sh`](run-benchmark.sh) runs it:
@@ -83,10 +88,14 @@ GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R matching_engine_benchmark
 ```
 
 2 MB pages for large allocations and no address randomisation. This removes a memory
-placement effect that otherwise changes some runs (not others) by ~40 ns at p50.
+placement effect that otherwise changes some runs.
 
 ## How results are compared
 
+- Compare versions **within one session, alternating runs**, never across sessions or reboots:
+  the whole level moved by ~30 ns per request between two boots on 2026-10-30, with the same
+  code and options. The only known change was the wider isolation, and moving the market data
+  publisher back to a core that isn't isolated didn't undo it.
 - Compare **p90** (and p99). p50 is a poor summary here.
 - **p99.9 and max are dominated by noise** we have not fully explained, don't use them to
   compare code changes. My suspicion is that the order lookup client_orders_[client_id][order_id]. The array is 24MB with 30 MB L3 cache.
@@ -100,6 +109,12 @@ measured the logging itself, see `31ac48a` below. The detailed measurements (`ad
 `match`, `checkForMatch`, `addOrder`, `removeOrder`) and the TTT hops (T3, T4, T4t) are
 commented out in the code and can be turned back on for a closer look.
 
+Throughput is measured by the driver, the engine has no code for it: from publishing the first
+request to reading the last request's response, divided by the number of requests. Sent back to
+back, the engine always has requests queued, so this is its busy time per request. It covers the
+whole loop, including the log line and reading the request, which `processClientRequest`
+leaves out.
+
 ## History
 
 The optimisations in order, with the numbers measured at the time. The workload and the
@@ -108,12 +123,15 @@ machine setup changed along the way, so compare numbers within a table, not acro
 ## Reproduce
 
 ```bash
-# build (from the repo root)
-cmake -S matching-engine -B matching-engine/cmake-build-release
-cmake --build matching-engine/cmake-build-release -j --target matching_engine_benchmark
+# once per boot: pin the uncore clock, check the setup
+sudo benchmarks/matching-engine-benchmark/prepare-machine.sh
 
-# run and analyse (the log goes to /tmp/me-bench)
-<repo>/benchmarks/matching-engine-benchmark/run-benchmark.sh
+# build (from the repo root)
+cmake -S exchange/matching-engine -B exchange/matching-engine/cmake-build-release
+cmake --build exchange/matching-engine/cmake-build-release -j --target matching_engine_benchmark
+
+# run, analyse and record (the log goes to /tmp/me-bench)
+benchmarks/matching-engine-benchmark/run-benchmark.sh
 ```
 
 To compare two commits, build each into its own binary and alternate runs with a cool-down
