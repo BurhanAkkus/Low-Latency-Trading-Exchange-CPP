@@ -1,0 +1,11 @@
+run,variant,label,commit,start_temp,huge_pct,count,mean,p50,p90,p99,p99.9,max,ns_per_request
+1,A,"main --consumer-loop-ns 2000",94cc2d8,62,96.9,450000,116,97,223,395,536,21870,157.756
+1,B,"ab/09-publish-per-message --consumer-loop-ns 2000",40752f2,62,96.9,450000,120,98,233,443,620,1221,159.526
+2,A,"main --consumer-loop-ns 2000",94cc2d8,62,97.1,450000,116,98,224,396,542,978,158.538
+2,B,"ab/09-publish-per-message --consumer-loop-ns 2000",40752f2,62,96.9,450000,121,98,234,446,626,1048,159.685
+3,A,"main --consumer-loop-ns 2000",94cc2d8,61,97.1,450000,117,98,224,397,543,1478,158.87
+3,B,"ab/09-publish-per-message --consumer-loop-ns 2000",40752f2,61,96.9,450000,120,98,233,441,621,1137,159.576
+4,A,"main --consumer-loop-ns 2000",94cc2d8,62,97.1,450000,118,98,225,400,544,12797,160.272
+4,B,"ab/09-publish-per-message --consumer-loop-ns 2000",40752f2,62,96.9,450000,120,98,232,441,621,1004,158.965
+5,A,"main --consumer-loop-ns 2000",94cc2d8,63,96.9,450000,116,98,224,397,540,1014,158.444
+5,B,"ab/09-publish-per-message --consumer-loop-ns 2000",40752f2,62,96.9,450000,120,98,231,439,622,9675,158.819
