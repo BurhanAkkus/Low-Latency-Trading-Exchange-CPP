@@ -8,7 +8,7 @@
 #
 # results.csv gets one row per run: the commit, whether the engine code had uncommitted changes
 # (dirty) and a fingerprint of those changes (runs with the same fingerprint ran the same code),
-# the options and processClientRequest's stats in ns.
+# the options, processClientRequest's stats in ns and the throughput in ns per request.
 #
 # Usage:   run-benchmark.sh [benchmark options]
 #          run-benchmark.sh --price-min 101 --price-max 110
@@ -47,8 +47,8 @@ else
 fi
 [[ -n ${BENCH_BIN:-} ]] && changes="$changes (BENCH_BIN=$BENCH_BIN)"
 
-# Skip the first 10% of requests as warm-up.
-requests=200000
+# Skip the first 10% of requests as warm-up. The benchmark's default is 500000.
+requests=500000
 args=("$@")
 for ((i = 0; i + 1 < ${#args[@]}; i++)); do
     [[ ${args[i]} == --requests ]] && requests=${args[i + 1]}
@@ -58,7 +58,12 @@ done
 mkdir -p "$DIR"
 cd "$DIR"
 rm -f exchange*.log
-GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R "$BIN" "$@"
+GLIBC_TUNABLES=glibc.malloc.hugetlb=1 setarch -R "$BIN" "$@" | tee benchmark.out
+throughput=$(awk '/^throughput:/ {print $(NF-1)}' benchmark.out)
+if [[ -z $throughput ]]; then
+    echo "no throughput line in the benchmark's output, nothing recorded" >&2
+    exit 1
+fi
 analysis=$(python3 "$REPO/scripts/perf-analysis.py" --skip-first $((requests / 10)))
 echo "$analysis"
 
@@ -68,6 +73,6 @@ if [[ -z $stats ]]; then
     echo "no processClientRequest line in the analysis, nothing recorded" >&2
     exit 1
 fi
-[[ -f $RESULTS ]] || echo "date,commit,dirty,changes,options,count,mean,p50,p90,p99,p99.9,max" > "$RESULTS"
-echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$stats" >> "$RESULTS"
+[[ -f $RESULTS ]] || echo "date,commit,dirty,changes,options,count,mean,p50,p90,p99,p99.9,max,ns_per_request" > "$RESULTS"
+echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$stats,$throughput" >> "$RESULTS"
 echo "recorded in $RESULTS"

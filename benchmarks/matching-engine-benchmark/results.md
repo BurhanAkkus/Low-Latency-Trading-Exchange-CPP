@@ -26,28 +26,39 @@ left in the hot path, see [what is measured](#what-is-measured).
 **Kernel boot parameters** (results from "core isolation" on):
 
 ```
-isolcpus=nohz,domain,managed_irq,4-9 nohz_full=4-9 rcu_nocbs=4-9 irqaffinity=0-3,10-23 nmi_watchdog=0
+isolcpus=nohz,domain,managed_irq,4-13 nohz_full=4-13 rcu_nocbs=4-13 irqaffinity=0-3,14-23 nmi_watchdog=0
 ```
 
-Physical cores 2-4 (CPUs 4-9) are reserved for the benchmark: the scheduler, device interrupts,
+Physical cores 2-6 (CPUs 4-13) are reserved for the benchmark: the scheduler, device interrupts,
 the 1 kHz timer tick and RCU callbacks stay off them. Only the benchmark's threads, which pin
-themselves, run there.
+themselves, run there. Until 2026-10-30 it was cores 2-4 (CPUs 4-9), the market data publisher
+stand-in needed a fourth core.
 
 | Parameter | What it does |
 |---|---|
-| `isolcpus=…,4-9` | Takes the CPUs out of the kernel's general use. The flags before the list choose what is taken away. |
+| `isolcpus=…,4-13` | Takes the CPUs out of the kernel's general use. The flags before the list choose what is taken away. |
 | `domain` | Removes the CPUs from the scheduler's load balancing: it never places or moves a thread there by itself. Only threads that pin themselves to those CPUs run on them. |
 | `nohz` | Stops the timer tick on those CPUs while only one thread runs there (see `nohz_full`). |
 | `managed_irq` | Keeps managed interrupts off the CPUs where possible. These are devices with one hardware queue per CPU whose interrupts the kernel spreads over all CPUs, such as the NVMe disk. |
-| `nohz_full=4-9` | Stops the periodic timer tick on a CPU that runs a single thread. The kernel normally interrupts every busy CPU 1,000 times a second (`CONFIG_HZ=1000`) to decide whether to switch threads, account CPU time and run expired timers; with one thread there is nothing to switch to, and other CPUs do the bookkeeping. About one tick per second remains. |
-| `rcu_nocbs=4-9` | RCU callbacks (deferred freeing of kernel data) run in kernel threads on other CPUs instead of on the CPU that queued them. Implied by `nohz_full` on current kernels. |
-| `irqaffinity=0-3,10-23` | Default CPUs for all other device interrupts. Only a default: a driver can pin its own interrupts. The Wi-Fi driver does, one receive queue per CPU, so its queues on CPUs 4-9 stay there. They fire with network traffic: turn Wi-Fi off for benchmarks or move them by writing `0-3,10-23` to `/proc/irq/<n>/smp_affinity_list`. |
+| `nohz_full=4-13` | Stops the periodic timer tick on a CPU that runs a single thread. The kernel normally interrupts every busy CPU 1,000 times a second (`CONFIG_HZ=1000`) to decide whether to switch threads, account CPU time and run expired timers; with one thread there is nothing to switch to, and other CPUs do the bookkeeping. About one tick per second remains. |
+| `rcu_nocbs=4-13` | RCU callbacks (deferred freeing of kernel data) run in kernel threads on other CPUs instead of on the CPU that queued them. Implied by `nohz_full` on current kernels. |
+| `irqaffinity=0-3,14-23` | Default CPUs for all other device interrupts. Only a default: a driver can pin its own interrupts. The Wi-Fi driver does, one receive queue per CPU, so its queues on CPUs 4-13 stay there. They fire with network traffic: at idle traffic a few times per 5 s on the engine's CPU, and Wi-Fi on or off made no measurable difference (170 vs 169-173 ns per request). Avoid heavy network traffic during runs, or move them by writing `0-3,14-23` to `/proc/irq/<n>/smp_affinity_list`. |
 | `nmi_watchdog=0` | Turns off the hard-lockup detector, which sends every CPU a non-maskable interrupt every few seconds to check it still responds. An NMI can't be blocked, so it interrupts the engine whatever it is doing. |
 
 Together they took the interrupts on the engine's CPU from ~6,200 per run to 2-7.
 
-**Threads:** matching engine on CPU 4, its logger on CPU 6, benchmark driver on CPU 8. The
-hyper-thread siblings 5, 7, 9 stay idle.
+**Threads:** matching engine on CPU 4, its logger on CPU 6, benchmark driver (the order server
+stand-in) on CPU 8, market data publisher stand-in on CPU 10. The hyper-thread siblings 5, 7, 9,
+11 stay idle, CPUs 12-13 are kept for the snapshot synthesizer.
+
+**Uncore clock:** pinned to its maximum, 4.5 GHz, by
+[`prepare-machine.sh`](prepare-machine.sh) (`sudo`, after every boot, `--undo` restores the
+default). The uncore is the ring and L3 cache between the cores. Left free it follows system
+activity between 0.8 and 4.5 GHz, and with it the cost of every cache line the engine and the
+threads reading its queues pass between them. Compared across two sessions, so only roughly,
+pinning made the engine ~5-8 ns per request faster at a tight consumer loop and ~3 ns at 1 µs.
+The script also checks the isolation, AC power, power profile and turbo, and warns about what
+differs.
 
 **Workload** (benchmark defaults since `9bf8326`):
 

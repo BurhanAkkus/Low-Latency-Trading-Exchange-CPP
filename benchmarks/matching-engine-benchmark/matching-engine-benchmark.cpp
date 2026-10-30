@@ -22,7 +22,7 @@ using namespace Exchange;
 
 namespace {
   struct Config {
-    size_t requests = 200'000;
+    size_t requests = 500'000;
     // 0 sends back to back: the driver is faster than the engine, so it keeps MAX_IN_FLIGHT
     // requests queued and the engine runs with warm caches, never waiting for a request. The
     // engine keeps up from 1us.
