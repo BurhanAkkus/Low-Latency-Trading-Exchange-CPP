@@ -324,16 +324,15 @@ namespace Exchange{
     // The old head level just emptied, every other ask is above it: the new head is the lowest
     // set bit from the head's word up. The sentinel ends the search, ME_MAX_PRICE_LEVELS + 1
     // if there are no asks left.
+    // A/B experiment 6: linear scan up the levels, as before 0ce11e6. The sentinel level is never
+    // empty and ends the scan.
     inline void MEOrderBook::findNextSellHead() noexcept {
-        size_t w = head_of_ask_ / 64;
-        while(!ask_levels_[w]) w++;
-        head_of_ask_ = w * 64 + std::countr_zero(ask_levels_[w]);
+        do head_of_ask_++; while (!sell_orders[head_of_ask_].first_order_);
     }
     // Every other bid is below the old head: highest set bit from the head's word down, the
     // sentinel ends the search at 0 if there are no bids left.
+    // A/B experiment 6: linear scan down the levels, as before 0ce11e6, the sentinel ends it.
     inline void MEOrderBook::findNextBuyHead() noexcept {
-        size_t w = head_of_bid_ / 64;
-        while(!bid_levels_[w]) w--;
-        head_of_bid_ = w * 64 + 63 - std::countl_zero(bid_levels_[w]);
+        do head_of_bid_--; while (!buy_orders[head_of_bid_].first_order_);
     }
 }

@@ -67,12 +67,10 @@ namespace Exchange{
         // the last word, and a cleared sentinel would make the head search run off the bitmap.
         // An aggressor priced at a sentinel (a BUY at ME_MAX_PRICE_LEVELS + 1, a SELL at 0)
         // would match the sentinel order.
-        static inline auto setLevel(LevelBits& levels, Price price) noexcept{
-            levels[price / 64] |= 1ull << (price % 64);
-        }
-        static inline auto clearLevel(LevelBits& levels, Price price) noexcept{
-            levels[price / 64] &= ~(1ull << (price % 64));
-        }
+        // A/B experiment 6: the level bits aren't kept, the head search scans the levels instead
+        // (as before 0ce11e6). The bitmaps stay as members so the object layout doesn't change.
+        static inline auto setLevel(LevelBits&, Price) noexcept{}
+        static inline auto clearLevel(LevelBits&, Price) noexcept{}
         inline auto getSellOrdersAtPrice(Price price) noexcept->MEOrdersAtPrice*{
             return &sell_orders[price];
         }
