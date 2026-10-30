@@ -36,7 +36,6 @@ namespace Exchange{
         void processClientRequest(const MEClientRequest* incoming_request) noexcept;
         void inline sendClientResponse(const MEClientResponse *client_response) noexcept;
         void inline sendMarketUpdate(const MEMarketUpdate *market_update) noexcept;
-        void inline publishOutputs() noexcept;
     
         private:
         //ToDo
@@ -49,8 +48,6 @@ namespace Exchange{
         std::string time_str_;
         std::thread* thread_ = nullptr;
         std::array<MEOrderBook*,ME_MAX_TICKERS> ticker_order_book_;
-        size_t pending_client_responses_{0};
-        size_t pending_market_updates_{0};
     };
 
     // Defined in the header so the order book can inline them.
@@ -58,14 +55,18 @@ namespace Exchange{
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
         //     __FUNCTION__, Common::getCurrentNanos(),
         //     client_response->toString());
-        *outgoing_responses_->getNextWriteTo(pending_client_responses_++) = *client_response;
+        // A/B experiment 9: every response published on its own, as before 6aa4733.
+        *outgoing_responses_->getNextWriteTo() = *client_response;
+        outgoing_responses_->updateWriteIndex();
         // TTT_MEASURE(T4t_MatchingEngine_LFQueue_write, logger_);
     }
     void inline MatchingEngine::sendMarketUpdate(const MEMarketUpdate *market_update) noexcept {
         // logger_.log("%:% %() % Sending %\n", __FILE__, __LINE__,
         //     __FUNCTION__, Common::getCurrentNanos(),
         //     market_update->toString());
-        *outgoing_market_updates_->getNextWriteTo( pending_market_updates_++) = *market_update;
+        // A/B experiment 9: every market update published on its own, as before 6aa4733.
+        *outgoing_market_updates_->getNextWriteTo() = *market_update;
+        outgoing_market_updates_->updateWriteIndex();
         // TTT_MEASURE(T4_MatchingEngine_LFQueue_write, logger_);
     }
 

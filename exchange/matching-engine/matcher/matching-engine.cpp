@@ -62,12 +62,6 @@ namespace Exchange{
             }
         }
 
-    void inline MatchingEngine::publishOutputs() noexcept{
-        outgoing_responses_->updateWriteIndex(pending_client_responses_);
-        pending_client_responses_ = 0;
-        outgoing_market_updates_->updateWriteIndex(pending_market_updates_);
-        pending_market_updates_ = 0;
-    }
 
     auto MatchingEngine::processClientRequest(const MEClientRequest* incoming_request) noexcept -> void{
         auto& order_book = ticker_order_book_[incoming_request->ticker_id_];
