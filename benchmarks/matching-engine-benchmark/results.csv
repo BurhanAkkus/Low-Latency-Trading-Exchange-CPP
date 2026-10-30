@@ -4,3 +4,4 @@ date,commit,dirty,changes,options,count,mean,p50,p90,p99,p99.9,max
 2026-10-26 12:32,7d60304,no,-,"",450000,102,79,162,306,1569,22247
 2026-10-26 13:38,446b5c6,no,-,"",450000,104,84,160,301,1500,21670
 2026-10-26 15:04,ee4121a,no,-,"--requests 500000",450000,86,74,144,247,352,25013
+----,----,,,"BENCHMARK CHANGED: rows below run with queue backpressure, stand-ins for the order server and market data publisher draining the output queues, and no pacing. Not comparable with the rows above.",,,,,,,
