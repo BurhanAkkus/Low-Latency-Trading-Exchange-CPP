@@ -53,7 +53,6 @@ namespace Exchange{
                 //         me_client_request->toString());
                 START_MEASURE(ME_req);
                 processClientRequest(me_client_request);
-                publishOutputs();
                 END_MEASURE(ME_req, logger_);
                 incoming_requests_->updateReadIndex();
                 } else if (stopping) {
