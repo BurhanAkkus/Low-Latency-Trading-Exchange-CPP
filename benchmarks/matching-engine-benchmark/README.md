@@ -156,7 +156,24 @@ numbers as the code's absolute cost.
 
 ## 5. Compare changes
 
-- Run 3-5 times per version and compare medians, single runs are noisy.
+[`ab-test.sh`](ab-test.sh) compares two variants: a git ref, optionally followed by benchmark
+options, quoted as one argument.
+
+```bash
+benchmarks/matching-engine-benchmark/ab-test.sh main ab/03-power-of-two
+benchmarks/matching-engine-benchmark/ab-test.sh "main --consumer-loop-ns 0" "main --consumer-loop-ns 16000"
+```
+
+It builds each commit from `git archive` under `/tmp/me-ab` (your working tree isn't touched),
+then runs A, B, A, B, ... for 5 rounds (`RUNS=N`), waiting before each run until the CPU package
+is back at its idle temperature. Every run goes to a CSV in [`ab-results/`](ab-results/), then
+[`scripts/ab-compare.py`](../../scripts/ab-compare.py) prints each variant's median and range for
+p50, p90, p99, p99.9 and throughput, and a permutation test on the difference. Runs more than 5%
+off their variant's median throughput are flagged and the test is repeated without them, see the
+two-mode effect in [results.md](results.md#setup). With 5 runs each, the smallest possible
+p-value is 0.008: complete separation.
+
+- Compare within one session only, never with runs from another session or boot.
 - Change one thing at a time and keep everything else (options, cores, machine setup) the same.
 - Every `run-benchmark.sh` run appends a row to [`results.csv`](results.csv):
 

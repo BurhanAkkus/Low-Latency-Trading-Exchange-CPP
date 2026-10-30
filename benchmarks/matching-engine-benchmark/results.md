@@ -134,5 +134,5 @@ cmake --build exchange/matching-engine/cmake-build-release -j --target matching_
 benchmarks/matching-engine-benchmark/run-benchmark.sh
 ```
 
-To compare two commits, build each into its own binary and alternate runs with a cool-down
-between them (see [how results are compared](#how-results-are-compared)).
+To compare two commits, or one commit with different options, use
+[`ab-test.sh`](ab-test.sh), see the [benchmark README](README.md#5-compare-changes).
