@@ -65,7 +65,8 @@ namespace Common{
         // slow it down, and no syscall or sleep the producer has to wake up from.
         auto getNextWriteTo(size_t offset = 0) noexcept{
             while (UNLIKELY(!hasSpace(offset + 1))) __builtin_ia32_pause();
-            return &store_[(next_to_write_.load(std::memory_order_relaxed) + offset) & MASK];
+            // A/B experiment 3: slot by dividing by the runtime size, as before 0d36b92.
+            return &store_[(next_to_write_.load(std::memory_order_relaxed) + offset) % store_.size()];
         }
         auto updateWriteIndex(size_t n = 1) noexcept{
             next_to_write_.store(next_to_write_.load(std::memory_order_relaxed) + n, std::memory_order_release);
@@ -78,7 +79,8 @@ namespace Common{
                 cached_write_ = next_to_write_.load(std::memory_order_acquire);
                 if (read == cached_write_) return nullptr;
             }
-            return &store_[read & MASK];
+            // A/B experiment 3: slot by dividing by the runtime size, as before 0d36b92.
+            return &store_[read % store_.size()];
         }
         auto updateReadIndex() noexcept{
             const auto read = next_to_read_.load(std::memory_order_relaxed);
