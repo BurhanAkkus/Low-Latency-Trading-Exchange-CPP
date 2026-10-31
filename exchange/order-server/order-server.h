@@ -12,6 +12,7 @@ using namespace Common;
 
 namespace Exchange{
     class OrderServer{
+        public:
         OrderServer(ClientRequestLFQueue *client_requests,
             ClientResponseLFQueue *client_responses, const std::string &iface,
             int port);
@@ -19,7 +20,7 @@ namespace Exchange{
         auto start() noexcept -> void;
         auto stop() noexcept -> void;
         private:
-        volatile bool run_;    
+        std::atomic<bool> run_;    
         const std::string iface_;
         const int port_ = 0;;
         ClientRequestLFQueue* client_requests_{nullptr};
@@ -73,7 +74,7 @@ namespace Exchange{
                         // send rejected.
                     }
                     next_expected_seq_num++;
-                    fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_);
+                    fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
                 };
                 // copy the last incomplete portion to the beginning.
                 // we have read the portion [0,i].
@@ -84,5 +85,7 @@ namespace Exchange{
         auto recvFinishedCallback() noexcept {
             fifo_sequencer_.publishReceived();
         }
+        auto run() noexcept -> void;
+        auto sendClientResponses() noexcept -> void;
     };
 }

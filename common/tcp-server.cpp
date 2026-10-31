@@ -29,9 +29,10 @@ namespace Common{
         // remove socket from TCPServer bookkeeping.
         // ToDo
         // Search is in O(n). Can be improved?
-        sockets_.erase(std::find(sockets_.cbegin(),sockets_.cend(),socket),sockets_.end());
-        receive_sockets_.erase(std::find(receive_sockets_.cbegin(),receive_sockets_.cend(),socket),receive_sockets_.end());
-        send_sockets_.erase(std::find(send_sockets_.cbegin(),send_sockets_.cend(),socket),send_sockets_.end());
+        std::erase(sockets_, socket);
+        std::erase(receive_sockets_, socket);
+        std::erase(send_sockets_, socket);
+        disconnect_callback_(socket);
     }
  
     auto TCPServer::listen(const std::string &iface, int port) -> void {

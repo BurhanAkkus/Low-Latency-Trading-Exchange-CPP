@@ -16,9 +16,11 @@ namespace Exchange{
         // ToDo - improvement
         // copy memory instead of copying 1 by 1.
         for(size_t i = 0; i < poll_results_size_; i++){
-            auto& client_request{poll_results_[i]};
-            *incoming_requests_->getNextWriteTo(poll_results_size_++) = std::move(client_request.request_);
-            incoming_requests_->updateWriteIndex();
+            while(UNLIKELY(!incoming_requests_->hasSpace(i + 1))){
+                while_full_();
+                __builtin_ia32_pause();
+            }
+            *incoming_requests_->getNextWriteTo(i) = poll_results_[i].request_;
         }
         publishOutputs();
     }

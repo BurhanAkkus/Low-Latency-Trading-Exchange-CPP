@@ -10,29 +10,16 @@ namespace Common {
       send_sockets_, disconnected_sockets_;
     std::function<void(TCPSocket *s, Nanos rx_time)> recv_callback_;
     std::function<void()> recv_finished_callback_;
+    std::function<void(TCPSocket* socket)> disconnect_callback_;
     std::string time_str_;
     Logger &logger_;
 
-
-    inline auto defaultRecvCallback(TCPSocket *socket, Nanos
-      rx_time) noexcept {
-      logger_.log("%:% %() % TCPServer::defaultRecvCallback() socket:% len:% rx:%\n",
-         __FILE__, __LINE__, __FUNCTION__,
-            Common::getCurrentNanos(), socket->
-              fd_, socket->next_rcv_valid_index_, rx_time);
-    }
-    inline auto defaultRecvFinishedCallback() noexcept {
-      logger_.log("%:% %() % TCPServer:: defaultRecvFinishedCallback()\n", 
-        Common::getCurrentTimeStr(&time_str_));
-    }
-
-
-    explicit TCPServer(Logger &logger)
-        : listener_socket_(logger), logger_(logger) {
-      recv_callback_ = [this](auto socket, auto rx_time) {
-        defaultRecvCallback(socket, rx_time); };
-      recv_finished_callback_ = [this]() {
-        defaultRecvFinishedCallback(); };
+    explicit TCPServer(Logger &logger,
+      std::function<void(TCPSocket *s, Nanos rx_time)> recv_callback,
+      std::function<void()> recv_finished_callback)
+        : listener_socket_(logger), recv_callback_(std::move(recv_callback)),
+          recv_finished_callback_(std::move(recv_finished_callback)), logger_(logger) {
+      disconnect_callback_ = [](auto) {};
     }
 
 

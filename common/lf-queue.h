@@ -52,6 +52,8 @@ namespace Common{
 
         // Producer.
         // True when the n slots after the published ones are free.
+        // ToDo - Improvement
+        // should return amount of space available.
         auto hasSpace(size_t n = 1) noexcept -> bool{
             const auto end = next_to_write_.load(std::memory_order_relaxed) + n;
             if (end - cached_read_ <= N) return true;

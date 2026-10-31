@@ -32,9 +32,7 @@ int main(){
     std::string iface = "lo";
     const std::string ip = "127.0.0.1";// ip of loopback protocol.
     int port = 12345;
-    TCPServer tcp_server{logger_};
-    tcp_server.recv_callback_ = tcpServerRecvCallback;
-    tcp_server.recv_finished_callback_= tcpServerRecvFinishedCallback;
+    TCPServer tcp_server{logger_, tcpServerRecvCallback, tcpServerRecvFinishedCallback};
     tcp_server.listen(iface,port);
     
     // clients.
