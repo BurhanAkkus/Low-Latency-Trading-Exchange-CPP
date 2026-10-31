@@ -144,11 +144,20 @@ namespace Common{
         for (auto socket: receive_sockets_) {
             if(socket->sendAndRecv())
                 recv = true;
+            markIfDisconnected(socket);
             }
         if(recv)
-            recv_finished_callback_();  
+            recv_finished_callback_();
         for (auto socket: send_sockets_) {
             socket->sendAndRecv();
+            markIfDisconnected(socket);
         }
+    }
+    // The next poll() deletes it.
+    auto TCPServer::markIfDisconnected(TCPSocket *socket) noexcept -> void {
+        if (UNLIKELY(socket->send_disconnected_ || socket->recv_disconnected_) &&
+            std::find(disconnected_sockets_.begin(), disconnected_sockets_.end(), socket) ==
+            disconnected_sockets_.end())
+            disconnected_sockets_.push_back(socket);
     }
 }

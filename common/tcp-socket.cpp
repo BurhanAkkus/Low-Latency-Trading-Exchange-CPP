@@ -15,10 +15,13 @@ namespace Common {
     }
     // Push to send buffer.
     auto TCPSocket::send(const void *data, size_t len) noexcept -> void {
-        if (len > 0) {
+        // The peer doesn't read what we send: disconnect it rather than lose data or stall everyone.
+        if (UNLIKELY(send_disconnected_ || next_send_valid_index_ + len > TCPBufferSize)) {
+            send_disconnected_ = true;
+            return;
+        }
         memcpy(send_buffer_ + next_send_valid_index_, data, len);
         next_send_valid_index_ += len;
-        }
     }
     // receive and Send together.
     // Receive-> write to read buffer from fd
@@ -72,42 +75,28 @@ namespace Common {
                 fd_, next_rcv_valid_index_, user_time,
                 kernel_time, (user_time - kernel_time));
             recv_callback_(this, kernel_time);
+        } else if (UNLIKELY(n_rcv == 0 || !wouldBlock())) {
+            // 0: the peer closed the connection. An error other than no data: it's gone.
+            recv_disconnected_ = true;
         }
 
-        // SEND
-        // defensive cap of TCPBufferSize.
-        ssize_t n_send = std::min(TCPBufferSize, next_send_valid_index_);
-        // There is something to send in send buffer.
-        //ToDo
-        // Handle new data being pushed to send buffer while inside the loop.
-        while (n_send > 0) {
-            // defensive cap of next_send_valid_index_, should never bind.
-            auto n_send_this_msg = std::min(static_cast<ssize_t>(next_send_valid_index_),
-             n_send);
-            // Non-blocking send, Supress SigPipe if peer is dced.
-            const int flags = MSG_DONTWAIT | MSG_NOSIGNAL | 
-                (n_send_this_msg < n_send ? MSG_MORE : 0);
-            // n bytes sent. Read from the beginning of send_buffer.
-            auto n = ::send(fd_, send_buffer_, n_send_this_msg,
-                flags);
-            // error during send
+        // Sends as much as the kernel takes, the rest stays in the buffer for the next call.
+        size_t sent = 0;
+        while (sent < next_send_valid_index_) {
+            const auto n = ::send(fd_, send_buffer_ + sent, next_send_valid_index_ - sent, MSG_DONTWAIT | MSG_NOSIGNAL);
             if (UNLIKELY(n < 0)) {
-                // error is not due to NotBlocking.
-                if (!wouldBlock())
-                    send_disconnected_ = true;
-                // ToDo
-                // breaks even if wouldBlock is true and a retry could remedy.
-                // Add Retry.
+                // Not a full kernel buffer: the connection is gone.
+                if (!wouldBlock()) send_disconnected_ = true;
                 break;
             }
-            logger_.log("%:% %() % send socket:% len:%\n",
-                __FILE__, __LINE__, __FUNCTION__,
-                Common::getCurrentNanos(), fd_, n);
-            // remaining bytes to send after n bytes are sent.
-            n_send -= n;
-            ASSERT(n == n_send_this_msg, "Don't support partial send lengths yet.");
+            sent += n;
         }
-        next_send_valid_index_ = 0;
+        // ToDo - improvement
+        // a slow peer's backlog is moved on every partial send, keep a start index instead.
+        if (sent) {
+            memmove(send_buffer_, send_buffer_ + sent, next_send_valid_index_ - sent);
+            next_send_valid_index_ -= sent;
+        }
         return (n_rcv > 0);
     }
 }

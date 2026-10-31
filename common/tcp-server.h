@@ -41,5 +41,6 @@ namespace Common {
     private: 
         auto epoll_add(TCPSocket *socket) -> bool;
         auto epoll_del(TCPSocket *socket) -> bool;
+        auto markIfDisconnected(TCPSocket *socket) noexcept -> void;
   };
 }
