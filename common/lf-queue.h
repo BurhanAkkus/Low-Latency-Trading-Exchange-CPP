@@ -36,7 +36,9 @@ namespace Common{
         // Producer's last seen next_to_read_, reloaded only when the queue looks full, so
         // writing doesn't pull the consumer's cache line on every element.
         size_t cached_read_ = 0;
-        alignas(CACHE_LINE_SIZE) std::atomic<size_t> next_to_read_{0};
+        // A/B experiment 2b: no alignas, next_to_read_ and cached_write_ share the producer's line
+        // with next_to_write_ and cached_read_: 4 x 8 bytes from the line next_to_write_ starts.
+        std::atomic<size_t> next_to_read_{0};
         // Consumer's last seen next_to_write_, reloaded only when the consumer catches up to it,
         // so draining a batch doesn't pull the producer's cache line on every read.
         mutable size_t cached_write_ = 0;
