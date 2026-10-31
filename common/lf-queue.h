@@ -32,7 +32,7 @@ namespace Common{
         // release store hands read slots back to the producer. On x86 both are plain movs.
         // Producer and consumer data on separate cache lines, otherwise every write
         // invalidates the line the other thread is reading.
-        alignas(CACHE_LINE_SIZE) std::atomic<size_t> next_to_write_{0};
+        std::atomic<size_t> next_to_write_{0};
         // Producer's last seen next_to_read_, reloaded only when the queue looks full, so
         // writing doesn't pull the consumer's cache line on every element.
         size_t cached_read_ = 0;
