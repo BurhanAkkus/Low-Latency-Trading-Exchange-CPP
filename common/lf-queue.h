@@ -30,14 +30,15 @@ namespace Common{
         // updates are plain stores, no atomic read-modify-write.
         // next_to_write_'s release store publishes the slots to the consumer, next_to_read_'s
         // release store hands read slots back to the producer. On x86 both are plain movs.
-        // Producer and consumer data on separate cache lines, otherwise every write
-        // invalidates the line the other thread is reading.
+        // A/B experiment 2b: no alignas, as in the book. The queue is 56 bytes and only 8-byte
+        // aligned: store_'s header at bytes 0-23, the four counters at 24-55, packed. Producer and
+        // consumer counters and the vector header share cache lines, so every counter write
+        // invalidates the line the other thread reads. Which members share exactly depends on
+        // where the queue lands in memory.
         std::atomic<size_t> next_to_write_{0};
         // Producer's last seen next_to_read_, reloaded only when the queue looks full, so
         // writing doesn't pull the consumer's cache line on every element.
         size_t cached_read_ = 0;
-        // A/B experiment 2b: no alignas, next_to_read_ and cached_write_ share the producer's line
-        // with next_to_write_ and cached_read_: 4 x 8 bytes from the line next_to_write_ starts.
         std::atomic<size_t> next_to_read_{0};
         // Consumer's last seen next_to_write_, reloaded only when the consumer catches up to it,
         // so draining a batch doesn't pull the producer's cache line on every read.
