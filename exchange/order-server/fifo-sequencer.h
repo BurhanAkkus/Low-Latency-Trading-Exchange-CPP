@@ -20,12 +20,15 @@ namespace Exchange{
         // ToDo - improvement
         // we lose sort from each socket.
         // maybe keep a different array for each socket and use merge only.
+        // Another idea, insert like a heap to assist with the sort.
         auto addClientRequest(Nanos rx_time, const MEClientRequest &request) {
             if (UNLIKELY(poll_results_size_ >= poll_results_.size())) {
                 FATAL("Too many pending requests");
             }
             poll_results_.at(poll_results_size_++) = std::move(RecvTimeClientRequest{rx_time, request});
         }
+
+        void publishReceived() noexcept;
         private:
         struct RecvTimeClientRequest {
             Nanos recv_time_ = 0;
@@ -40,10 +43,8 @@ namespace Exchange{
         // ToDo - improvement
         // sort only the times from the poll results.
         // Instantiate the objects directly in the client_requests queue instead of here.
-        std::array<RecvTimeClientRequest, ME_MAX_NUM_CLIENTS> poll_results_;
+        std::array<RecvTimeClientRequest, ME_MAX_PENDING_REQUESTS> poll_results_;
         size_t poll_results_size_{0};
-        size_t pending_client_requests_{0};
-        void publishReceived() noexcept;
         void publishOutputs() noexcept;
     };
 }

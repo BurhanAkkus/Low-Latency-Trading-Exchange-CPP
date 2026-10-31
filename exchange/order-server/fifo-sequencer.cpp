@@ -4,8 +4,8 @@ using namespace Common;
 
 namespace Exchange{
     void FIFOSequencer::publishOutputs() noexcept{
-            incoming_requests_->updateWriteIndex(pending_client_requests_);
-            pending_client_requests_ = 0;
+            incoming_requests_->updateWriteIndex(poll_results_size_);
+            poll_results_size_ = 0;
         }
     void FIFOSequencer::publishReceived() noexcept{
         // ToDo - research
@@ -15,8 +15,10 @@ namespace Exchange{
         std::sort(poll_results_.begin(),poll_results_.begin() + poll_results_size_);
         // ToDo - improvement
         // copy memory instead of copying 1 by 1.
-        for(auto& client_request:poll_results_){
-            *incoming_requests_->getNextWriteTo(pending_client_requests_++) = client_request.request_;
+        for(size_t i = 0; i < poll_results_size_; i++){
+            auto& client_request{poll_results_[i]};
+            *incoming_requests_->getNextWriteTo(poll_results_size_++) = std::move(client_request.request_);
+            incoming_requests_->updateWriteIndex();
         }
         publishOutputs();
     }

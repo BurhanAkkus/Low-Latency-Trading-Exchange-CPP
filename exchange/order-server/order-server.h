@@ -31,6 +31,7 @@ namespace Exchange{
         std::array<TCPSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
         TCPServer tcp_server_;
         FIFOSequencer fifo_sequencer_;
+        
         auto recvCallback(TCPSocket *socket, Nanos rx_time) noexcept {
             // logger_.log("%:% %() % Received socket:% len:% rx:%\n", __FILE__,
             // __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
@@ -48,6 +49,8 @@ namespace Exchange{
                             client_to_port_[request->me_client_request_.client_id_] = socket;
                         }
                     // Client is connected to another socket.
+                    // ToDo
+                    // Turn this into assert.
                     else if(client_to_port_[request->me_client_request_.client_id_]  != socket){
                         logger_.log("%:% %() % Received ClientRequest from ClientId:% on different socket:% expected:%\n",
                              __FILE__, __LINE__, __FUNCTION__,
@@ -72,9 +75,14 @@ namespace Exchange{
                     next_expected_seq_num++;
                     fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_);
                 };
+                // copy the last incomplete portion to the beginning.
+                // we have read the portion [0,i].
                 memcpy(socket->rcv_buffer_, socket->rcv_buffer_ + i, socket->next_rcv_valid_index_ - i);
                 socket->next_rcv_valid_index_ -= i;
             }
         }
-    }
+        auto recvFinishedCallback() noexcept {
+            fifo_sequencer_.publishReceived();
+        }
+    };
 }
