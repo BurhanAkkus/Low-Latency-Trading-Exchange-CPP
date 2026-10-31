@@ -1,0 +1,11 @@
+run,variant,label,commit,start_temp,huge_pct,count,mean,p50,p90,p99,p99.9,max,ns_per_request
+1,A,"main --consumer-loop-ns 2000",94cc2d8,62,97.1,450000,92,86,161,281,383,4396,129.193
+1,B,"ab/02b-shared-cache-line --consumer-loop-ns 2000",7ba9fcc,64,96.9,450000,110,97,187,351,508,9571,265.486
+2,A,"main --consumer-loop-ns 2000",94cc2d8,64,96.9,450000,92,86,162,284,391,7497,128.578
+2,B,"ab/02b-shared-cache-line --consumer-loop-ns 2000",7ba9fcc,65,96.9,450000,111,98,188,348,503,9873,245.009
+3,A,"main --consumer-loop-ns 2000",94cc2d8,65,97.1,450000,93,87,163,286,392,10390,130.041
+3,B,"ab/02b-shared-cache-line --consumer-loop-ns 2000",7ba9fcc,65,96.9,450000,105,94,184,347,500,25281,238.371
+4,A,"main --consumer-loop-ns 2000",94cc2d8,64,96.9,450000,92,86,160,278,379,748,128.308
+4,B,"ab/02b-shared-cache-line --consumer-loop-ns 2000",7ba9fcc,65,96.9,450000,109,96,186,350,505,3195,239.386
+5,A,"main --consumer-loop-ns 2000",94cc2d8,66,96.9,450000,92,86,160,278,384,752,128.561
+5,B,"ab/02b-shared-cache-line --consumer-loop-ns 2000",7ba9fcc,65,96.9,450000,110,98,187,351,512,12625,240.224
