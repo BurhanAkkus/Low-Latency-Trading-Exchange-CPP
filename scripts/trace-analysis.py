@@ -45,7 +45,7 @@ RESPONSE_PATH = [
     ("T2", "T3", "waiting in the request queue"),
     ("T3", "T4", "matching engine"),
     ("T4", "T5", "waiting in the response queue"),
-    ("T5", "T6", "waiting for the next send pass"),
+    ("T5", "T6", "rest of the response drain, send() into TCP"),
     ("T6", "C7", "TCP out, client read"),
 ]
 MARKET_DATA_PATH = [

@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <limits>
 #include "socket-utils.h"
 #include "logging.h"
 namespace Common {
@@ -12,9 +13,9 @@ namespace Common {
     size_t next_rcv_valid_index_ = 0;
     bool send_disconnected_ = false;
     bool recv_disconnected_ = false;
-    // The socket's place in each of the server's SocketLists, -1 when it isn't in it.
-    int receive_index_ = -1;
-    int send_index_ = -1;
+    // The socket's place in each of the server's SocketLists. Starts past every list's end: in none.
+    size_t receive_index_ = std::numeric_limits<size_t>::max();
+    size_t send_index_ = std::numeric_limits<size_t>::max();
     struct sockaddr_in inInAddr;
     std::function<void(TCPSocket *s, Nanos rx_time)>recv_callback_;
     std::string time_str_;
@@ -60,9 +61,12 @@ namespace Common {
 
     // Write outgoing data to the send buffer.
     auto send(const void *data, size_t len) noexcept -> void;
-    
-    // Called to publish outgoing data from the buffers as well as check for and callback if data is available in the read buffers.
-    auto sendAndRecv() noexcept -> bool;
+
+    // Reads what the kernel has into the read buffer and calls recv_callback_. True if it read something.
+    auto receive() noexcept -> bool;
+
+    // Sends the send buffer, as much as the kernel takes, the rest stays for the next call.
+    auto flush() noexcept -> void;
 };
   
 }

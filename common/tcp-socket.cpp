@@ -23,10 +23,8 @@ namespace Common {
         memcpy(send_buffer_ + next_send_valid_index_, data, len);
         next_send_valid_index_ += len;
     }
-    // receive and Send together.
     // Receive-> write to read buffer from fd
-    // Send -> write to fd from send buffer.
-    auto TCPSocket::sendAndRecv() noexcept -> bool {
+    auto TCPSocket::receive() noexcept -> bool {
         // ancillary data looks like 
         // [ cmsghdr header ][ padding ][ payload (struct timeval) ][ trailing padding ]
         // CMSG_SPACE() computes the amount of memory required to hold a payload of
@@ -79,7 +77,10 @@ namespace Common {
             // 0: the peer closed the connection. An error other than no data: it's gone.
             recv_disconnected_ = true;
         }
-
+        return (n_rcv > 0);
+    }
+    // Send -> write to fd from send buffer.
+    auto TCPSocket::flush() noexcept -> void {
         // Sends as much as the kernel takes, the rest stays in the buffer for the next call.
         size_t sent = 0;
         while (sent < next_send_valid_index_) {
@@ -100,6 +101,5 @@ namespace Common {
             // analysis takes the first send after a response's T5.
             TRACE(T6, fd_, logger_);
         }
-        return (n_rcv > 0);
     }
 }

@@ -15,7 +15,9 @@ namespace Common{
         epoll_event event;
         // reconstruct socket via reinterpret_cast<TCPSocket*>(event.data.ptr).
         event.data.ptr = reinterpret_cast<void *>(socket);
-        event.events = EPOLLIN | EPOLLET;
+        // Level-triggered: epoll_wait reports a socket for as long as it has data to read, so a
+        // socket can leave receive_sockets_ once it's read.
+        event.events = EPOLLIN;
         return epoll_ctl(efd_, EPOLL_CTL_ADD,socket->fd_,&event) == 0;
     }
 
@@ -122,16 +124,24 @@ namespace Common{
     auto TCPServer::sendAndRecv() noexcept -> void {
         auto recv = false;
         for (auto socket: receive_sockets_) {
-            if(socket->sendAndRecv())
+            if(socket->receive())
                 recv = true;
             markIfDisconnected(socket);
             }
         if(recv)
             recv_finished_callback_();
-        for (auto socket: send_sockets_) {
-            socket->sendAndRecv();
+        flush();
+        // Read. epoll reports them again when there is more.
+        receive_sockets_.clear();
+    }
+    // A socket stays in send_sockets_ while its send buffer has data the kernel didn't take, the
+    // next flush() tries again.
+    auto TCPServer::flush() noexcept -> void {
+        send_sockets_.keepIf([this](TCPSocket *socket) {
+            socket->flush();
             markIfDisconnected(socket);
-        }
+            return socket->next_send_valid_index_ != 0 && !socket->send_disconnected_;
+        });
     }
     // The next poll() deletes it.
     auto TCPServer::markIfDisconnected(TCPSocket *socket) noexcept -> void {

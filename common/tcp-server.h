@@ -4,15 +4,21 @@
 #include <array>
 #include <set>
 namespace Common {
-  // Sockets in a list: contains, insert and erase in O(1), iterated like an array. Each socket
-  // keeps its place in the list in Index, one field per list: a socket can be in several.
+  // Sockets in a list: contains, insert, erase and clear in O(1), iterated like an array. Each
+  // socket keeps its place in the list in Index, one field per list: a socket can be in several.
+  // Every slot below size_ holds a socket in the list, so a socket is in it when the slot its
+  // Index points to holds it. A socket that left keeps a stale Index, which fails that check.
   // Erase moves the last socket into the gap, so the order changes. Don't erase while
-  // iterating the same list.
-  template <int TCPSocket::*Index>
+  // iterating the same list, keepIf() removes while it iterates.
+  template <size_t TCPSocket::*Index>
   struct SocketList {
     std::array<TCPSocket *, ME_MAX_NUM_CLIENTS> sockets_{};
-    int size_ = 0;
-    auto contains(const TCPSocket *socket) const noexcept { return socket->*Index != -1; }
+    size_t size_ = 0;
+    auto contains(const TCPSocket *socket) const noexcept {
+      // Unsigned: index < size_ also keeps sockets_[index] in bounds.
+      const size_t index = socket->*Index;
+      return index < size_ && sockets_[index] == socket;
+    }
     auto insert(TCPSocket *socket) noexcept -> void {
       if (contains(socket)) return;
       socket->*Index = size_;
@@ -24,7 +30,19 @@ namespace Common {
       TCPSocket *last = sockets_[--size_];
       sockets_[socket->*Index] = last;
       last->*Index = socket->*Index;
-      socket->*Index = -1;
+    }
+    // Every socket leaves the list.
+    auto clear() noexcept -> void { size_ = 0; }
+    // Keeps the sockets keep() returns true for, in their order, the others leave the list.
+    // keep() must not change the list.
+    template <typename Keep>
+    auto keepIf(Keep keep) noexcept -> void {
+      size_t kept = 0;
+      for (size_t i = 0; i < size_; ++i) {
+        auto socket = sockets_[i];
+        if (keep(socket)) { socket->*Index = kept; sockets_[kept++] = socket; }
+      }
+      size_ = kept;
     }
     auto begin() const noexcept { return sockets_.begin(); }
     auto end() const noexcept { return sockets_.begin() + size_; }
@@ -37,6 +55,9 @@ namespace Common {
     epoll_event events_[1024];
     std::vector<TCPSocket *> sockets_;
     // At most ME_MAX_NUM_CLIENTS connections, poll() refuses the rest.
+    // receive_sockets_: the sockets epoll reported readable, sendAndRecv() reads them.
+    // send_sockets_: the sockets with data in their send buffer, send() adds them, flush() sends
+    // them.
     SocketList<&TCPSocket::receive_index_> receive_sockets_;
     SocketList<&TCPSocket::send_index_> send_sockets_;
     std::set<TCPSocket *> disconnected_sockets_;
@@ -70,7 +91,14 @@ namespace Common {
     
     auto poll() noexcept -> void;
     auto sendAndRecv() noexcept -> void;
-    private: 
+    // Into the socket's send buffer, the next flush() sends it.
+    auto send(TCPSocket *socket, const void *data, size_t len) noexcept -> void {
+      socket->send(data, len);
+      send_sockets_.insert(socket);
+    }
+    // Sends the send buffers of send_sockets_.
+    auto flush() noexcept -> void;
+    private:
         auto epoll_add(TCPSocket *socket) -> bool;
         auto epoll_del(TCPSocket *socket) -> bool;
         auto markIfDisconnected(TCPSocket *socket) noexcept -> void;

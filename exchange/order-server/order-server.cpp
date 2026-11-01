@@ -29,21 +29,24 @@ namespace Exchange{
         sendClientResponses();
         }
     }
-    // Writes the responses to the clients' send buffers, the next sendAndRecv() sends them.
+    // Writes the responses to the clients' send buffers and sends them.
     auto OrderServer::sendClientResponses() noexcept -> void {
         // ToDo - improvement
         // send all of them together as a memcpy operation.
         for (auto client_response = client_responses_->getNextReadTo();
                 client_response; client_response = (client_responses_->updateReadIndex(),client_responses_->getNextReadTo())) {
-            if(UNLIKELY(client_to_port_[client_response->client_id_] == nullptr)){continue;}
+            auto socket = client_to_port_[client_response->client_id_];
+            if(UNLIKELY(socket == nullptr)){continue;}
             // Final responses only: a fill isn't the end of a request.
             if (client_response->type_ != ClientResponseType::FILLED)
                 TRACE(T5, traceKey(*client_response), logger_);
             auto &next_outgoing_seq_num = cid_next_outgoing_seq_num_[client_response->client_id_];
-            client_to_port_[client_response->client_id_]->send(&next_outgoing_seq_num, sizeof(next_outgoing_seq_num));
-            client_to_port_[client_response->client_id_]->send(client_response, sizeof(MEClientResponse));
+            tcp_server_.send(socket, &next_outgoing_seq_num, sizeof(next_outgoing_seq_num));
+            tcp_server_.send(socket, client_response, sizeof(MEClientResponse));
             ++next_outgoing_seq_num;
             }
+        // One send per socket, with all of its responses.
+        tcp_server_.flush();
     }
     auto OrderServer::start(int core_id) noexcept -> void {
         run_ = true;

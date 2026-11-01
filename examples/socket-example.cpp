@@ -5,6 +5,8 @@ using namespace Common;
 
 int main(){
     Logger logger_{"../logs/socket-example.log"};
+    // The server's callback replies through it, it's created below.
+    TCPServer *server = nullptr;
     auto tcpServerRecvCallback = [&](TCPSocket *socket, Nanos rx_time)
     noexcept -> void {
         std::string received_message = std::string(socket->rcv_buffer_,socket->next_rcv_valid_index_);
@@ -16,7 +18,7 @@ int main(){
         //receive the message from buffer.
         socket->next_rcv_valid_index_ = 0;
         // send reply
-        socket->send(reply.data(), reply.length());
+        server->send(socket, reply.data(), reply.length());
     };
     auto tcpServerRecvFinishedCallback = [&]() noexcept -> void {
         logger_.log("TCPServer::defaultRecvFinishedCallback()\n");
@@ -33,6 +35,7 @@ int main(){
     const std::string ip = "127.0.0.1";// ip of loopback protocol.
     int port = 12345;
     TCPServer tcp_server{logger_, tcpServerRecvCallback, tcpServerRecvFinishedCallback};
+    server = &tcp_server;
     tcp_server.listen(iface,port);
     
     // clients.
@@ -54,7 +57,8 @@ int main(){
             getCurrentTimeStr(&time_str);
             std::string client_message = "Client " + std::to_string(i) + " is sending message " + std::to_string(iter) + " at time: " + time_str;
             clients[i]->send(reinterpret_cast<void*>(client_message.data()),client_message.size());
-            clients[i]->sendAndRecv();
+            clients[i]->receive();
+            clients[i]->flush();
             std::this_thread::sleep_for(50ms);
             tcp_server.poll();
             tcp_server.sendAndRecv();
@@ -63,7 +67,8 @@ int main(){
     for(int iter = 0; iter < 5; iter++){
         // clients receive answer.
         for(auto &client:clients){
-            client->sendAndRecv();
+            client->receive();
+            client->flush();
         }
         tcp_server.poll();
         tcp_server.sendAndRecv();
