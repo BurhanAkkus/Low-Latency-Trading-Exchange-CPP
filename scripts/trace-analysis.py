@@ -103,6 +103,7 @@ class Exchange:
 
     def __init__(self, paths):
         self.stages = {s: {} for s in REQUEST_STAGES}
+        self.outputs = {}  # request key -> (responses, market updates) the engine produced for it
         # fd -> starts and ends of reads / sends, in time order: one logger writes them in order.
         self.reads = defaultdict(lambda: ([], []))
         self.sends = defaultdict(lambda: ([], []))
@@ -123,6 +124,8 @@ class Exchange:
                         continue
                     if tag in self.stages:
                         self.stages[tag].setdefault(a, b)
+                    elif tag == "T4n":
+                        self.outputs.setdefault(a, (b >> 32, b & 0xFFFFFFFF))
                     elif tag in ("R0", "R1"):
                         self.reads[a][tag == "R1"].append(b)
                     elif tag in ("S0", "T6"):
@@ -190,6 +193,29 @@ class Path:
             print(f"{a + ' -> ' + b if a else '':<11} {what:<52} {mean:8.2f} {mean / total_mean:6.1%} {cells} {v[-1]:8.2f}")
 
 
+def print_engine_by_fills(rows, tsc_ghz):
+    """The engine's time (T3 -> T4) by the number of fills the request made, rows are (cycles,
+    responses). A NEW gets an ACCEPTED, then per fill a FILLED for itself and one for the resting
+    order. A CANCEL gets one response. Last column: how the slowest 0.1% engine times split."""
+    if not rows:
+        return
+    us = 1000.0 * tsc_ghz
+    slowest = sorted(c for c, _ in rows)[int(len(rows) * 0.999)]
+    slow_total = sum(1 for c, _ in rows if c >= slowest)
+    print(f"\nmatching engine (T3 -> T4) by the request's fills: {len(rows)} requests (us)")
+    print(f"{'fills':<6} {'requests':>9} {'share':>6} {'mean':>8} {'p50':>8} {'p90':>8} {'p99':>8} {'p99.9':>8} {'max':>8}"
+          f" {'of slowest 0.1%':>16}")
+    for lo, hi, label in ((0, 0, "0"), (1, 1, "1"), (2, 2, "2"), (3, 4, "3-4"), (5, 8, "5-8"), (9, None, "9+")):
+        inside = [c for c, r in rows if lo <= (r - 1) // 2 and (hi is None or (r - 1) // 2 <= hi)]
+        if not inside:
+            continue
+        v = sorted(c / us for c in inside)
+        cells = " ".join(f"{perf.percentile(v, p):8.2f}" for p in perf.PERCENTILES)
+        slow = sum(1 for c in inside if c >= slowest)
+        print(f"{label:<6} {len(v):>9} {len(v) / len(rows):6.1%} {sum(v) / len(v):8.2f} {cells} {v[-1]:8.2f}"
+              f" {slow / slow_total:16.1%}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("dir", nargs="?", default=".", help="directory with exchange*.log and benchmark_trace.log")
@@ -217,6 +243,7 @@ def main():
     no_syscalls_md = Path("request -> publisher reads its update, without syscalls", NO_SYSCALL_MD_PATH, None,
                           "sum: the order server, the engine, the queue")
     path_stages = {s for a, b, _ in RESPONSE_PATH for s in (a, b)}
+    engine_rows = []
     incomplete = 0
     for i in range(warmup, len(keys)):
         key = keys[i]
@@ -229,6 +256,8 @@ def main():
             continue
         response.add(t)
         no_syscalls.add(t)
+        if key in exchange.outputs:
+            engine_rows.append((t["T4"] - t["T3"], exchange.outputs[key][0]))
         if i < len(c1):
             client_send.add({"C0": c0[i], "C1": c1[i]})
         update = link.get(key)
@@ -244,6 +273,7 @@ def main():
     market_data.print(tsc_ghz)
     no_syscalls.print(tsc_ghz)
     no_syscalls_md.print(tsc_ghz)
+    print_engine_by_fills(engine_rows, tsc_ghz)
 
 
 if __name__ == "__main__":
