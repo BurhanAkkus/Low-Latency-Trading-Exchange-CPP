@@ -29,9 +29,9 @@ namespace Common{
         // remove socket from TCPServer bookkeeping.
         // ToDo
         // Search is in O(n). Can be improved?
-        std::erase(sockets_, socket);
-        receive_sockets_.erase( socket);
-        send_sockets_.erase( socket);
+        std::erase(sockets_,socket);
+        receive_sockets_.erase(socket);
+        send_sockets_.erase(socket);
         disconnect_callback_(socket);
     }
  
@@ -67,41 +67,17 @@ namespace Common{
             epoll_event &event = events_[i];
             // event.data.ptr points to the socket during epoll_add.
             auto socket = reinterpret_cast<TCPSocket*>(event.data.ptr);
-            // if event is EPOLLIN
-            if(event.events & EPOLLIN){
-                // if its a new connection
-                if(UNLIKELY(socket == &listener_socket_)){
-                    //set have_new_connection
-                    // logger_.log("%:% %() % EPOLLIN listener_socket:%\n", 
-                    //     __FILE__, __LINE__, __FUNCTION__, 
-                    // Common::getCurrentTimeStr(&time_str_), socket->fd_);
-                    have_new_connection = true;
-                    continue;
-                }
-                // logger_.log("%:% %() % EPOLLIN socket:%\n",
-                //     __FILE__, __LINE__, __FUNCTION__,
-                //     Common::getCurrentNanos(), 
-                //     socket->fd_);
-
-                // add to receive sockets
-                receive_sockets_.insert(socket);
+            // The listener is readable when connections are waiting to be accepted.
+            if (UNLIKELY(socket == &listener_socket_)) {
+                have_new_connection = true;
+                continue;
             }
-            // if event is EPOLLOUT
-            else if(event.events & EPOLLOUT){
-                // logger_.log("%:% %() % EPOLLOUT socket:%\n",
-                //     __FILE__, __LINE__, __FUNCTION__,
-                //     Common::getCurrentNanos(), 
-                //     socket->fd_);
-                // add to send sockets
-                send_sockets_.insert(socket);
-            }
-            // if connection is dropped
-            else if (event.events & (EPOLLERR | EPOLLHUP)) {
-                // logger_.log("%:% %() % EPOLLERR socket:%\n",
-                // __FILE__, __LINE__, __FUNCTION__,
-                //     Common::getCurrentTimeStr(&time_str_), socket->fd_);
-                disconnected_sockets_.insert(socket);
-            }
+            // Something to read, or the peer closed: recv returns 0.
+            if (event.events & EPOLLIN) receive_sockets_.insert(socket);
+            // The kernel's send buffer has room again.
+            if (event.events & EPOLLOUT) send_sockets_.insert(socket);
+            // The connection is gone.
+            if (event.events & (EPOLLERR | EPOLLHUP)) disconnected_sockets_.insert(socket);
         }
         while (have_new_connection) {
             sockaddr_storage sockaddr_;
