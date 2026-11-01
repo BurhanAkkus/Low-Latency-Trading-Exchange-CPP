@@ -38,5 +38,9 @@ target_link_libraries(exchange_main PRIVATE libexchange pthread)
 add_executable(exchange ${REPO_ROOT}/exchange/exchange-main.cpp)
 target_link_libraries(exchange PRIVATE libexchange pthread)
 
+# Clients for a running exchange: TCP orders in, responses and multicast market data out.
+add_executable(exchange_benchmark ${REPO_ROOT}/benchmarks/exchange-benchmark/exchange-benchmark.cpp)
+target_link_libraries(exchange_benchmark PRIVATE libcommon pthread)
+
 add_executable(matching_engine_benchmark ${REPO_ROOT}/benchmarks/matching-engine-benchmark/matching-engine-benchmark.cpp)
 target_link_libraries(matching_engine_benchmark PRIVATE libexchange pthread)
