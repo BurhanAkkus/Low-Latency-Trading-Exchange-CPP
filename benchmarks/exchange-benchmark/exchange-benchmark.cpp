@@ -191,6 +191,15 @@ namespace {
 
   auto key(uint64_t ticker_id, uint64_t market_order_id) noexcept { return (ticker_id << 32) | market_order_id; }
 
+  // Room for n elements with its pages already faulted in. reserve() alone only sets the memory
+  // aside: the first write to each page would fault (a 2 MB huge page is zeroed) on the thread that
+  // timestamps arrivals, during the run.
+  template <typename T>
+  auto preallocate(std::vector<T>& v, size_t n) {
+    v.resize(n);
+    v.clear();
+  }
+
   // p50 / p90 / p99 / p99.9 / max in microseconds, sorts v.
   auto percentiles(std::vector<int64_t>& v) {
     std::array<double, 5> p{};
@@ -230,7 +239,7 @@ int main(int argc, char** argv) {
   ASSERT(md_socket.init(INCREMENTAL_IP, IFACE, INCREMENTAL_PORT, true) >= 0 && md_socket.join(INCREMENTAL_IP),
          "Can't join the incremental market data.");
   std::vector<Update> updates;  // ADD and CANCEL only, matched to requests after the run.
-  updates.reserve(2 * n);
+  preallocate(updates, 2 * n);
   size_t md_updates = 0, md_lost = 0, md_next_seq = 0;
   md_socket.recv_callback_ = [&](McastSocket* s) {
     const auto time = now();
@@ -252,7 +261,7 @@ int main(int argc, char** argv) {
 
   // Responses: every final response's arrival, per client seq numbers checked for gaps.
   std::vector<Response> responses;
-  responses.reserve(n);
+  preallocate(responses, n);
   std::atomic<size_t> finals{0};
   size_t fills = 0, tcp_gaps = 0;
   auto receiver_thread = createAndStartThread(cfg.receiver_core, "Benchmark/Receiver", [&]() {
@@ -263,8 +272,9 @@ int main(int argc, char** argv) {
       ev.data.u32 = static_cast<uint32_t>(c);
       ASSERT(epoll_ctl(efd, EPOLL_CTL_ADD, fds[c], &ev) == 0, "epoll_ctl() failed.");
     }
-    // Per client: bytes of a response split across two reads.
-    struct Buffer { char data[64 * 1024]; size_t size = 0; };
+    // Per client: bytes of a response split across two reads. Zeroed, so its pages are in before the
+    // run (see preallocate).
+    struct Buffer { char data[64 * 1024]{}; size_t size = 0; };
     std::vector<Buffer> buffers(cfg.clients + 1);
     std::vector<size_t> next_seq(cfg.clients + 1, 1);
     epoll_event events[ME_MAX_NUM_CLIENTS];
