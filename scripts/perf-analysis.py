@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Latency report from the RDTSC / TTT lines written by common/perf-utils.h.
+"""Latency report from the measurement lines written by common/perf-utils.h.
 
 Log lines look like:
-    <tsc>         RDTSC <tag> <cycles>      -- START_MEASURE / END_MEASURE
-    <epoch nanos> TTT   <tag> <epoch nanos> -- TTT_MEASURE
+    <tag> <cycles>       -- START_MEASURE / END_MEASURE (RDTSC)
+    <tag> <epoch nanos>  -- TTT_MEASURE, the tag is one of the hop names in HOPS
 
-RDTSC and TTT timestamps are on different clocks, so --skip-first cuts each file by line order:
-one logger writes a file, so its lines are in time order.
+Both are "<tag> <integer>", the tag tells them apart: hop names are TTT, any other tag RDTSC.
+Builds of commits before 2026-11-01 (ab-test.sh's experiment branches) write
+"<timestamp> <RDTSC|TTT> <tag> <value>", which is read too.
+RDTSC lines carry no timestamp, so --skip-first cuts each file by line order: one logger writes a
+file, so its lines are in time order.
 
 RDTSC tags: time spent inside a code block, cycles converted to ns with the TSC frequency.
 TTT hops:   for every event of the later tag, latency = its timestamp minus the most
@@ -41,6 +44,13 @@ HOPS = [
     # end to end: TCP read -> first message out of the matching engine
     ("T1_OrderServer_TCP_read", "T4t_MatchingEngine_LFQueue_write"),
 ]
+
+# A measurement line's tag is TTT when it is a hop name, otherwise it is an RDTSC code block.
+TTT_TAGS = {tag for hop in HOPS for tag in hop}
+# "<tag> <integer>": an identifier and a number, so other log lines aren't taken for measurements.
+MEASUREMENT = re.compile(r"([A-Za-z_]\w*) (-?\d+)")
+# The format before 2026-11-01, it names the kind itself.
+OLD_MEASUREMENT = re.compile(r"\d+ (RDTSC|TTT) ([A-Za-z_]\w*) (-?\d+)")
 
 PERCENTILES = (50, 90, 99, 99.9)
 
@@ -110,18 +120,19 @@ def main():
     for path in files:
         with open(path, errors="replace") as f:
             for line_no, line in enumerate(f):
-                tokens = line.split()
-                if len(tokens) != 4 or tokens[1] not in ("RDTSC", "TTT"):
-                    continue
-                try:
-                    int(tokens[0])
-                    value = int(tokens[3])
-                except ValueError:
-                    continue
-                if tokens[1] == "RDTSC":
-                    rdtsc[tokens[2]].append((path, line_no, value / tsc_ghz))
+                line = line.rstrip("\n")
+                if m := MEASUREMENT.fullmatch(line):
+                    tag, value = m.group(1), int(m.group(2))
+                    is_ttt = tag in TTT_TAGS
+                elif m := OLD_MEASUREMENT.fullmatch(line):
+                    tag, value = m.group(2), int(m.group(3))
+                    is_ttt = m.group(1) == "TTT"
                 else:
-                    ttt[tokens[2]].append((path, line_no, value))
+                    continue
+                if is_ttt:
+                    ttt[tag].append((path, line_no, value))
+                else:
+                    rdtsc[tag].append((path, line_no, value / tsc_ghz))
 
     print(f"files: {', '.join(files)}")
     print(f"TSC: {tsc_ghz:.4f} GHz")

@@ -1,4 +1,5 @@
 #include "exchange/order-server/order-server.h"
+#include "common/perf-utils.h"
 
 using namespace Common;
 
@@ -23,9 +24,11 @@ namespace Exchange{
 
     auto OrderServer::run() noexcept -> void {
       while (run_) {
+        START_MEASURE(OS_loop);
         tcp_server_.poll();
         tcp_server_.sendAndRecv();
         sendClientResponses();
+        END_MEASURE(OS_loop, logger_);
         }
     }
     // Writes the responses to the clients' send buffers, the next sendAndRecv() sends them.

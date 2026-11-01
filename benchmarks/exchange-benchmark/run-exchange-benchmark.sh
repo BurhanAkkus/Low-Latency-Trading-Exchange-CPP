@@ -12,9 +12,10 @@
 # results.csv gets one row per run: the commit, whether the code had uncommitted changes (dirty) and
 # a fingerprint of them (runs with the same fingerprint ran the same code), the benchmark options,
 # the send rate, answered requests, tcp seq gaps, lost market updates, the exchange's requests/s
-# and market updates/s, p50 p90 p99 p99.9 max in us of request -> final response, of
-# request -> ADD / CANCEL update and of the sender's schedule lag, and the engine's
-# processClientRequest (ME_req) p50 and p99 in ns. Latencies leave out the first 10% of requests.
+# and market updates/s, and p50 p90 p99 p99.9 max in us of request -> final response, of
+# request -> ADD / CANCEL update and of the sender's schedule lag. Latencies leave out the first
+# 10% of requests. The exchange's own measurements (START_MEASURE / TTT_MEASURE in its logs) are
+# printed after the row, not recorded.
 #
 # Usage:   run-exchange-benchmark.sh [benchmark options]
 #          run-exchange-benchmark.sh --rate 200000 --clients 64
@@ -113,22 +114,16 @@ if [[ -z $result ]]; then
     echo "no csv line in the benchmark's output, nothing recorded" >&2
     exit 1
 fi
-# The engine's log is complete once the exchange has stopped.
-analysis=$(python3 "$REPO/scripts/perf-analysis.py" --skip-first $((requests / 10)))
-echo "$analysis"
-# count mean p50 p90 p99 p99.9 max
-engine=$(awk '$1 == "ME_req" {print $4","$6}' <<< "$analysis")
-if [[ -z $engine ]]; then
-    echo "no processClientRequest line in the analysis, nothing recorded" >&2
-    exit 1
-fi
-
 if [[ ! -f $RESULTS ]]; then
     latency=""
     for m in response md lag; do
         for p in p50 p90 p99 p99.9 max; do latency+=",${m}_$p"; done
     done
-    echo "date,commit,dirty,changes,options,sent_per_s,answered,tcp_gaps,md_lost,requests_per_s,md_updates_per_s$latency,engine_p50_ns,engine_p99_ns" > "$RESULTS"
+    echo "date,commit,dirty,changes,options,sent_per_s,answered,tcp_gaps,md_lost,requests_per_s,md_updates_per_s$latency" > "$RESULTS"
 fi
-echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$result,$engine" >> "$RESULTS"
+echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$result" >> "$RESULTS"
 echo "recorded in $RESULTS"
+
+# The exchange's own measurements, its logs are complete once it has stopped. Printed only, and a
+# run without any (or without one to find the warm-up by) is still recorded.
+python3 "$REPO/scripts/perf-analysis.py" --skip-first $((requests / 10)) || true

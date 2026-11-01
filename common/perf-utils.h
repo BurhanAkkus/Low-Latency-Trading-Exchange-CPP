@@ -30,20 +30,22 @@ namespace Common{
 }
 
 // LOGGER is a Logger (not a pointer).
-// Log lines are "<timestamp> <RDTSC|TTT> <TAG> <value>" and parsed by scripts/perf-analysis.py.
-// RDTSC lines are stamped with the TSC at the end of the block, TTT lines with epoch nanos.
-// The timestamp is pushed as an integer, the logger thread formats it.
+// Log lines are "<TAG> <value>\n" and parsed by scripts/perf-analysis.py: a code block's cycles,
+// or for TTT tags (the hop names in perf-analysis.py) the epoch nanos at that hop.
+// The value is pushed as an integer, the logger thread formats it.
+// The '\n' is needed: the logger writes no separator of its own, without it a line runs into the
+// next one.
 
 // Start measuring a code block. Creates a variable called TAG in the local scope.
 #define START_MEASURE(TAG) const auto TAG = Common::rdtscStart()
 
 // End measuring a code block started with START_MEASURE(TAG), logs elapsed cycles.
-// Stamped with end rather than getCurrentNanos(), the clock call costs ~15ns per measurement.
-// Keep TAG at most 8 characters: " RDTSC <TAG> " then fits in 2 log elements.
+// Keep TAG at most 7 characters: "<TAG> " then fits in 1 log element (8 chars), 3 per measurement
+// with the value and the '\n'.
 #define END_MEASURE(TAG, LOGGER)                                                                \
     do {                                                                                        \
         const auto end = Common::rdtscEnd();                                                    \
-        LOGGER.log("% RDTSC " #TAG " %\n", end, (end - TAG));                                  \
+        LOGGER.log(#TAG " %\n", (end - TAG));                                                   \
     } while(false)
 
 // Time-to-tick: log the current nanosecond timestamp at a hop on the order's path.
@@ -51,5 +53,5 @@ namespace Common{
 #define TTT_MEASURE(TAG, LOGGER)                                                                \
     do {                                                                                        \
         const auto TAG = Common::getCurrentNanos();                                             \
-        LOGGER.log("% TTT " #TAG " %\n", TAG, TAG);                                         \
+        LOGGER.log(#TAG " %\n", TAG);                                                           \
     } while(false)
