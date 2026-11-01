@@ -41,11 +41,11 @@ namespace Exchange{
             ++next_outgoing_seq_num;
             }
     }
-    auto OrderServer::start() noexcept -> void {
+    auto OrderServer::start(int core_id) noexcept -> void {
         run_ = true;
         tcp_server_.listen(iface_, port_);
-        ASSERT(Common::createAndStartThread(-1, "Exchange/OrderServer",
-        [this]() { run(); }) != nullptr, "Failed to start OrderServer thread.");
+        thread_ = Common::createAndStartThread(core_id, "Exchange/OrderServer", [this]() { run(); });
+        ASSERT(thread_ != nullptr, "Failed to start OrderServer thread.");
     }
 
     auto OrderServer::stop() noexcept -> void {
@@ -53,7 +53,6 @@ namespace Exchange{
     }
     OrderServer::~OrderServer() {
         stop();
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(1s);
+        if (thread_) { thread_->join(); delete thread_; thread_ = nullptr; }
     }
 }

@@ -15,9 +15,11 @@ namespace Exchange {
     SnapshotSynthesizer(MDPMarketUpdateLFQueue *market_updates, const std::string &iface,
                         const std::string &snapshot_ip, int snapshot_port);
     ~SnapshotSynthesizer();
-    auto start() -> void;
+    // core_id -1 leaves the thread unpinned.
+    auto start(int core_id = -1) -> void;
     auto stop() -> void;
   private:
+    std::thread* thread_ = nullptr;
     auto run() -> void;
     auto addToSnapshot(const MDPMarketUpdate *market_update) -> void;
     auto publishSnapshot() -> void;
@@ -30,6 +32,7 @@ namespace Exchange {
     std::array<std::array<MEMarketUpdate *, ME_MAX_ORDER_IDS>,ME_MAX_TICKERS> ticker_orders_{};
     size_t last_inc_seq_num_ = 0;
     Nanos last_snapshot_time_ = 0;
-    MemoryPool<MEMarketUpdate, ME_MAX_MARKET_UPDATES> order_pool_;
+    // Every order resting in any book: the engine can't rest more than this.
+    MemoryPool<MEMarketUpdate, ME_MAX_RESTING_ORDERS * ME_MAX_TICKERS> order_pool_;
   };
 }

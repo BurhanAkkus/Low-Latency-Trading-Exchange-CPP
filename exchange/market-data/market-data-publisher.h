@@ -8,24 +8,27 @@ namespace Exchange {
     class MarketDataPublisher {
         public:
         MarketDataPublisher(MEMarketUpdateLFQueue *market_updates, const std::string &iface, const std::string &snapshot_ip, int snapshot_port, const std::string &incremental_ip, int incremental_port);
-        auto start() noexcept -> void {
+        // core ids -1 leave the threads unpinned.
+        auto start(int core_id = -1, int snapshot_core_id = -1) noexcept -> void {
             run_ = true;
-            ASSERT(Common::createAndStartThread(-1, "Exchange/MarketDataPublisher", [this]() { run(); }) != nullptr,
-             "Failed to start MarketData thread.");
-            snapshot_synthesizer_->start();
+            thread_ = Common::createAndStartThread(core_id, "Exchange/MarketDataPublisher", [this]() { run(); });
+            ASSERT(thread_ != nullptr, "Failed to start MarketData thread.");
+            snapshot_synthesizer_->start(snapshot_core_id);
         }
+        // Stops the publisher only, the synthesizer stops when it is deleted.
         auto stop() noexcept -> void {
             run_ = false;
-            snapshot_synthesizer_->stop();
         }
         ~MarketDataPublisher() {
             stop();
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(5s);
+            // The publisher can be waiting for space in the snapshot queue: the synthesizer
+            // keeps reading it until the publisher is done, then stops.
+            if (thread_) { thread_->join(); delete thread_; thread_ = nullptr; }
             delete snapshot_synthesizer_;
             snapshot_synthesizer_ = nullptr;
         }
         private:
+        std::thread* thread_ = nullptr;
         size_t next_inc_seq_num_ = 1;
         MEMarketUpdateLFQueue *outgoing_md_updates_{nullptr};
         MDPMarketUpdateLFQueue snapshot_md_updates_;

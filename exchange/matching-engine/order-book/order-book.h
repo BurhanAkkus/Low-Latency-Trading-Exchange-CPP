@@ -51,7 +51,7 @@ namespace Exchange{
         LevelBits ask_levels_{};
         LevelBits bid_levels_{};
         std::array<std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>,ME_MAX_NUM_CLIENTS> client_orders_{};
-        MemoryPool<MEOrder, ME_MAX_ORDER_IDS> order_memory_pool_;
+        MemoryPool<MEOrder, ME_MAX_RESTING_ORDERS> order_memory_pool_;
         TickerId ticker_id_;
         OrderId next_market_order_id_ = 0;
         MEClientResponse client_response_;

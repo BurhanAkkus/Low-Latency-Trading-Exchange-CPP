@@ -10,13 +10,14 @@ namespace Exchange {
     /*is_listening*/ false) >= 0,
     "Unable to create snapshot mcast socket. error:" + std::string(std::strerror(errno)));
   }
-  void SnapshotSynthesizer::start() {
+  void SnapshotSynthesizer::start(int core_id) {
     run_ = true;
-    ASSERT(Common::createAndStartThread(-1, "Exchange/SnapshotSynthesizer", [this]() { run(); }) != nullptr,
-           "Failed to start SnapshotSynthesizer thread.");
+    thread_ = Common::createAndStartThread(core_id, "Exchange/SnapshotSynthesizer", [this]() { run(); });
+    ASSERT(thread_ != nullptr, "Failed to start SnapshotSynthesizer thread.");
   }
   SnapshotSynthesizer::~SnapshotSynthesizer() {
     stop();
+    if (thread_) { thread_->join(); delete thread_; thread_ = nullptr; }
   }
   void SnapshotSynthesizer::stop() {
     run_ = false;

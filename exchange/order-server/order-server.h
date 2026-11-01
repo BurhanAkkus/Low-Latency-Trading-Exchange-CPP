@@ -17,10 +17,12 @@ namespace Exchange{
             ClientResponseLFQueue *client_responses, const std::string &iface,
             int port);
         ~OrderServer();
-        auto start() noexcept -> void;
+        // core_id -1 leaves the thread unpinned.
+        auto start(int core_id = -1) noexcept -> void;
         auto stop() noexcept -> void;
         private:
-        std::atomic<bool> run_;    
+        std::atomic<bool> run_;
+        std::thread* thread_ = nullptr;
         const std::string iface_;
         const int port_ = 0;;
         ClientRequestLFQueue* client_requests_{nullptr};
