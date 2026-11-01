@@ -30,8 +30,8 @@ namespace Common{
         // ToDo
         // Search is in O(n). Can be improved?
         std::erase(sockets_, socket);
-        std::erase(receive_sockets_, socket);
-        std::erase(send_sockets_, socket);
+        receive_sockets_.erase( socket);
+        send_sockets_.erase( socket);
         disconnect_callback_(socket);
     }
  
@@ -82,29 +82,25 @@ namespace Common{
                 //     __FILE__, __LINE__, __FUNCTION__,
                 //     Common::getCurrentNanos(), 
                 //     socket->fd_);
+
                 // add to receive sockets
-                if(std::find(receive_sockets_.begin(),receive_sockets_.end(), socket) == receive_sockets_.end())
-                    receive_sockets_.push_back(socket);
+                receive_sockets_.insert(socket);
             }
             // if event is EPOLLOUT
-            if(event.events & EPOLLOUT){
+            else if(event.events & EPOLLOUT){
                 // logger_.log("%:% %() % EPOLLOUT socket:%\n",
                 //     __FILE__, __LINE__, __FUNCTION__,
                 //     Common::getCurrentNanos(), 
                 //     socket->fd_);
                 // add to send sockets
-                if(std::find(send_sockets_.begin(),send_sockets_.end(), socket) == send_sockets_.end())
-                    send_sockets_.push_back(socket);
+                send_sockets_.insert(socket);
             }
             // if connection is dropped
-            if (event.events & (EPOLLERR | EPOLLHUP)) {
+            else if (event.events & (EPOLLERR | EPOLLHUP)) {
                 // logger_.log("%:% %() % EPOLLERR socket:%\n",
                 // __FILE__, __LINE__, __FUNCTION__,
                 //     Common::getCurrentTimeStr(&time_str_), socket->fd_);
-                if(std::find(disconnected_sockets_.begin(),
-                    disconnected_sockets_.end(), socket) ==
-                    disconnected_sockets_.end())
-                disconnected_sockets_.push_back(socket);
+                disconnected_sockets_.insert(socket);
             }
         }
         while (have_new_connection) {
@@ -135,9 +131,7 @@ namespace Common{
             if(std::find(sockets_.cbegin(),sockets_.cend(),socket) == sockets_.cend()){
                 sockets_.push_back(socket);
             }
-            if(std::find(receive_sockets_.cbegin(),receive_sockets_.cend(),socket) == receive_sockets_.cend()){
-                receive_sockets_.push_back(socket);
-            }
+            receive_sockets_.insert(socket);
         }
     }
 
@@ -157,9 +151,7 @@ namespace Common{
     }
     // The next poll() deletes it.
     auto TCPServer::markIfDisconnected(TCPSocket *socket) noexcept -> void {
-        if (UNLIKELY(socket->send_disconnected_ || socket->recv_disconnected_) &&
-            std::find(disconnected_sockets_.begin(), disconnected_sockets_.end(), socket) ==
-            disconnected_sockets_.end())
-            disconnected_sockets_.push_back(socket);
+        if (UNLIKELY(socket->send_disconnected_ || socket->recv_disconnected_))
+            disconnected_sockets_.insert(socket);
     }
 }

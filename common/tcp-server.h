@@ -1,13 +1,14 @@
 #pragma once
 #include "tcp-socket.h"
+#include <set>
 namespace Common {
   struct TCPServer {
   public:
     int efd_ = -1;
     TCPSocket listener_socket_;
     epoll_event events_[1024];
-    std::vector<TCPSocket *> sockets_, receive_sockets_,
-      send_sockets_, disconnected_sockets_;
+    std::vector<TCPSocket *> sockets_ ;
+    std::set<TCPSocket *> receive_sockets_,send_sockets_,disconnected_sockets_;
     std::function<void(TCPSocket *s, Nanos rx_time)> recv_callback_;
     std::function<void()> recv_finished_callback_;
     std::function<void(TCPSocket* socket)> disconnect_callback_;
