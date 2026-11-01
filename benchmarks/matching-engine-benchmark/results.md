@@ -27,23 +27,27 @@ whole loop per request, measured by the driver.
 **Kernel boot parameters** (results from "core isolation" on):
 
 ```
-isolcpus=nohz,domain,managed_irq,4-13 nohz_full=4-13 rcu_nocbs=4-13 irqaffinity=0-3,14-23 nmi_watchdog=0
+isolcpus=nohz,domain,managed_irq,2-15 nohz_full=2-15 rcu_nocbs=2-15 irqaffinity=0-1,16-23 nmi_watchdog=0
 ```
 
-Physical cores 2-6 (CPUs 4-13) are reserved for the benchmark: the scheduler, device interrupts,
-the 1 kHz timer tick and RCU callbacks stay off them. Only the benchmark's threads, which pin
-themselves, run there. Until 2026-10-30 it was cores 2-4 (CPUs 4-9), the market data publisher
-stand-in needed a fourth core.
+Physical P-cores 1-7 (CPUs 2-15) are reserved for the benchmarks: the scheduler, device interrupts,
+the 1 kHz timer tick and RCU callbacks stay off them. Only the benchmarks' threads, which pin
+themselves, run there. The OS keeps P-core 0 (CPUs 0-1) and the E-cores (16-23).
+Until 2026-11-01 it was cores 2-6 (CPUs 4-13): the exchange benchmark needs seven physical
+cores (matching engine, order server, market data publisher, snapshot synthesizer with the
+engine's logger, and three client threads). Until 2026-10-30 it was cores 2-4 (CPUs 4-9), the
+market data publisher stand-in needed a fourth core. Results recorded before 2026-11-01 ran with
+the older isolation.
 
 | Parameter | What it does |
 |---|---|
-| `isolcpus=…,4-13` | Takes the CPUs out of the kernel's general use. The flags before the list choose what is taken away. |
+| `isolcpus=…,2-15` | Takes the CPUs out of the kernel's general use. The flags before the list choose what is taken away. |
 | `domain` | Removes the CPUs from the scheduler's load balancing: it never places or moves a thread there by itself. Only threads that pin themselves to those CPUs run on them. |
 | `nohz` | Stops the timer tick on those CPUs while only one thread runs there (see `nohz_full`). |
 | `managed_irq` | Keeps managed interrupts off the CPUs where possible. These are devices with one hardware queue per CPU whose interrupts the kernel spreads over all CPUs, such as the NVMe disk. |
-| `nohz_full=4-13` | Stops the periodic timer tick on a CPU that runs a single thread. The kernel normally interrupts every busy CPU 1,000 times a second (`CONFIG_HZ=1000`) to decide whether to switch threads, account CPU time and run expired timers; with one thread there is nothing to switch to, and other CPUs do the bookkeeping. About one tick per second remains. |
-| `rcu_nocbs=4-13` | RCU callbacks (deferred freeing of kernel data) run in kernel threads on other CPUs instead of on the CPU that queued them. Implied by `nohz_full` on current kernels. |
-| `irqaffinity=0-3,14-23` | Default CPUs for all other device interrupts. Only a default: a driver can pin its own interrupts. The Wi-Fi driver does, one receive queue per CPU, so its queues on CPUs 4-13 stay there. They fire with network traffic: at idle traffic a few times per 5 s on the engine's CPU, and Wi-Fi on or off made no measurable difference (170 vs 169-173 ns per request). Avoid heavy network traffic during runs, or move them by writing `0-3,14-23` to `/proc/irq/<n>/smp_affinity_list`. |
+| `nohz_full=2-15` | Stops the periodic timer tick on a CPU that runs a single thread. The kernel normally interrupts every busy CPU 1,000 times a second (`CONFIG_HZ=1000`) to decide whether to switch threads, account CPU time and run expired timers; with one thread there is nothing to switch to, and other CPUs do the bookkeeping. About one tick per second remains. |
+| `rcu_nocbs=2-15` | RCU callbacks (deferred freeing of kernel data) run in kernel threads on other CPUs instead of on the CPU that queued them. Implied by `nohz_full` on current kernels. |
+| `irqaffinity=0-1,16-23` | Default CPUs for all other device interrupts. Only a default: a driver can pin its own interrupts. The Wi-Fi driver does, one receive queue per CPU, so its queues on CPUs 2-15 stay there. They fire with network traffic: at idle traffic a few times per 5 s on the engine's CPU, and Wi-Fi on or off made no measurable difference (170 vs 169-173 ns per request, measured with CPUs 4-13 isolated). Avoid heavy network traffic during runs, or move them by writing `0-1,16-23` to `/proc/irq/<n>/smp_affinity_list`. The NVMe disk also has one queue per CPU, but a queue only fires for I/O started on its CPU, and nothing on 2-15 does I/O. |
 | `nmi_watchdog=0` | Turns off the hard-lockup detector, which sends every CPU a non-maskable interrupt every few seconds to check it still responds. An NMI can't be blocked, so it interrupts the engine whatever it is doing. |
 
 Together they took the interrupts on the engine's CPU from ~6,200 per run to 2-7.

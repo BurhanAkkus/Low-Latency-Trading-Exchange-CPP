@@ -35,7 +35,7 @@ done
 warn() { echo "WARNING: $*" >&2; }
 for f in isolated nohz_full; do
     cpus=$(cat "/sys/devices/system/cpu/$f")
-    [[ $cpus == 4-13 ]] || warn "$f CPUs are '$cpus', expected 4-13 (boot parameters, see results.md)"
+    [[ $cpus == 2-15 ]] || warn "$f CPUs are '$cpus', expected 2-15 (boot parameters, see results.md)"
 done
 ac=0
 for p in /sys/class/power_supply/*; do
