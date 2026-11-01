@@ -80,15 +80,16 @@ namespace Exchange {
           snapshot_socket_.sendAndRecv();
         }
       }
-      const MDPMarketUpdate end_market_update{snapshot_size++, {MarketUpdateType::SNAPSHOT_END, last_inc_seq_num_}};
-      logger_.log("%:% %() % %\n", __FILE__, __LINE__, __FUNCTION__,
-        getCurrentTimeStr(&time_str_), end_market_update.toString());
-      snapshot_socket_.send(&end_market_update, sizeof(MDPMarketUpdate));
-      snapshot_socket_.sendAndRecv();
-      logger_.log("%:% %() % Published snapshot of % orders.\n",
-        __FILE__, __LINE__, __FUNCTION__, getCurrentTimeStr(&time_str_),
-        snapshot_size - 1);
     }
+    // After every ticker: the snapshot ends once.
+    const MDPMarketUpdate end_market_update{snapshot_size++, {MarketUpdateType::SNAPSHOT_END, last_inc_seq_num_}};
+    logger_.log("%:% %() % %\n", __FILE__, __LINE__, __FUNCTION__,
+      getCurrentTimeStr(&time_str_), end_market_update.toString());
+    snapshot_socket_.send(&end_market_update, sizeof(MDPMarketUpdate));
+    snapshot_socket_.sendAndRecv();
+    logger_.log("%:% %() % Published snapshot of % orders.\n",
+      __FILE__, __LINE__, __FUNCTION__, getCurrentTimeStr(&time_str_),
+      snapshot_size - 1);
   }
   void SnapshotSynthesizer::run() {
     logger_.log("%:% %() %\n", __FILE__, __LINE__, __FUNCTION__,

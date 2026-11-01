@@ -26,7 +26,8 @@ namespace Exchange {
     std::atomic<bool> run_ = false;
     std::string time_str_;
     McastSocket snapshot_socket_;
-    std::array<std::array<MEMarketUpdate *, ME_MAX_ORDER_IDS>,ME_MAX_TICKERS> ticker_orders_;
+    // Every slot starts as nullptr: no order with that id yet.
+    std::array<std::array<MEMarketUpdate *, ME_MAX_ORDER_IDS>,ME_MAX_TICKERS> ticker_orders_{};
     size_t last_inc_seq_num_ = 0;
     Nanos last_snapshot_time_ = 0;
     MemoryPool<MEMarketUpdate, ME_MAX_MARKET_UPDATES> order_pool_;
