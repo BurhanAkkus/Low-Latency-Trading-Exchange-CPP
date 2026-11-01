@@ -21,6 +21,10 @@ namespace Common {
     }
     auto insert(TCPSocket *socket) noexcept -> void {
       if (contains(socket)) return;
+      push(socket);
+    }
+    // Insert without the contains check: the caller guarantees the socket isn't in the list.
+    auto push(TCPSocket *socket) noexcept -> void {
       socket->*Index = size_;
       sockets_[size_++] = socket;
     }
@@ -55,7 +59,9 @@ namespace Common {
     epoll_event events_[1024];
     std::vector<TCPSocket *> sockets_;
     // At most ME_MAX_NUM_CLIENTS connections, poll() refuses the rest.
-    // receive_sockets_: the sockets epoll reported readable, sendAndRecv() reads them.
+    // receive_sockets_: the sockets epoll reported readable, sendAndRecv() reads them and empties
+    // the list. poll() pushes without contains, epoll reports a socket once per poll(), so
+    // sendAndRecv() has to run between two poll()s.
     // send_sockets_: the sockets with data in their send buffer, send() adds them, flush() sends
     // them.
     SocketList<&TCPSocket::receive_index_> receive_sockets_;

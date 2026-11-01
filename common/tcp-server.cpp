@@ -75,7 +75,7 @@ namespace Common{
                 continue;
             }
             // Something to read, or the peer closed: recv returns 0.
-            if (event.events & EPOLLIN) receive_sockets_.insert(socket);
+            if (event.events & EPOLLIN) receive_sockets_.push(socket);
             // The kernel's send buffer has room again.
             if (event.events & EPOLLOUT) send_sockets_.insert(socket);
             // The connection is gone.
@@ -117,7 +117,8 @@ namespace Common{
             if(std::find(sockets_.cbegin(),sockets_.cend(),socket) == sockets_.cend()){
                 sockets_.push_back(socket);
             }
-            receive_sockets_.insert(socket);
+            // New: epoll_wait above didn't know it yet.
+            receive_sockets_.push(socket);
         }
     }
 
