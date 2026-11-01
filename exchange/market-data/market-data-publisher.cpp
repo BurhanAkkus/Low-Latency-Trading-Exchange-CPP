@@ -5,8 +5,7 @@ namespace Exchange {
         const std::string &iface,
         const std::string &snapshot_ip, int snapshot_port,
         const std::string&incremental_ip, int incremental_port):
-        outgoing_md_updates_(market_updates), 
-        snapshot_md_updates_(ME_MAX_MARKET_UPDATES),
+        outgoing_md_updates_(market_updates),
         run_(false),
             logger_("exchange_market_data_publisher.log"),
             incremental_socket_(logger_) {

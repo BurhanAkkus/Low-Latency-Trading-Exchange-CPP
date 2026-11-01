@@ -17,17 +17,26 @@ set(REPO_ROOT ${PROJECT_SOURCE_DIR}/../..)
 
 add_library(libcommon STATIC
     ${REPO_ROOT}/common/tcp-server.cpp
-    ${REPO_ROOT}/common/tcp-socket.cpp)
+    ${REPO_ROOT}/common/tcp-socket.cpp
+    ${REPO_ROOT}/common/mcast-socket.cpp)
 target_include_directories(libcommon PUBLIC ${REPO_ROOT})
 
 add_library(libexchange STATIC
     matcher/matching-engine.cpp
     matcher/me-order.cpp
-    order-book/order-book.cpp)
+    order-book/order-book.cpp
+    ${REPO_ROOT}/exchange/order-server/fifo-sequencer.cpp
+    ${REPO_ROOT}/exchange/order-server/order-server.cpp
+    ${REPO_ROOT}/exchange/market-data/market-data-publisher.cpp
+    ${REPO_ROOT}/exchange/market-data/snapshot-synthesizer.cpp)
 target_link_libraries(libexchange PUBLIC libcommon)
 
 add_executable(exchange_main matching-engine-main.cpp)
 target_link_libraries(exchange_main PRIVATE libexchange pthread)
+
+# The whole exchange: matching engine, order server, market data publisher.
+add_executable(exchange ${REPO_ROOT}/exchange/exchange-main.cpp)
+target_link_libraries(exchange PRIVATE libexchange pthread)
 
 add_executable(matching_engine_benchmark ${REPO_ROOT}/benchmarks/matching-engine-benchmark/matching-engine-benchmark.cpp)
 target_link_libraries(matching_engine_benchmark PRIVATE libexchange pthread)

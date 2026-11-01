@@ -11,7 +11,16 @@
 using namespace Common;
 namespace Exchange {
   class SnapshotSynthesizer {
+  public:
+    SnapshotSynthesizer(MDPMarketUpdateLFQueue *market_updates, const std::string &iface,
+                        const std::string &snapshot_ip, int snapshot_port);
+    ~SnapshotSynthesizer();
+    auto start() -> void;
+    auto stop() -> void;
   private:
+    auto run() -> void;
+    auto addToSnapshot(const MDPMarketUpdate *market_update) -> void;
+    auto publishSnapshot() -> void;
     MDPMarketUpdateLFQueue *snapshot_md_updates_ = nullptr;
     Logger logger_;
     std::atomic<bool> run_ = false;

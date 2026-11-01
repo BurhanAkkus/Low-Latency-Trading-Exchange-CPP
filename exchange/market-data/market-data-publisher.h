@@ -2,7 +2,7 @@
 #include <functional>
 #include <exchange/market-data/market-update.h>
 #include <common/logging.h>
-//#include "exchange/market_data/snapshot_synthesizer.h"
+#include "exchange/market-data/snapshot-synthesizer.h"
 
 namespace Exchange {
     class MarketDataPublisher {
@@ -34,6 +34,6 @@ namespace Exchange {
         Logger logger_;
         Common::McastSocket incremental_socket_;
         SnapshotSynthesizer *snapshot_synthesizer_ = nullptr;
-        auto MarketDataPublisher::run() noexcept -> void;
+        auto run() noexcept -> void;
     };
 }

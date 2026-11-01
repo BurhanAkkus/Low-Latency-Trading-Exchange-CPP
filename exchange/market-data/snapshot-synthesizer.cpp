@@ -3,18 +3,16 @@
 namespace Exchange {
   SnapshotSynthesizer::SnapshotSynthesizer(MDPMarketUpdateLFQueue *market_updates,
                                            const std::string &iface,
-                                           const std::string &snapshot_
-                                           ip, int snapshot_port)
+                                           const std::string &snapshot_ip, int snapshot_port)
       : snapshot_md_updates_(market_updates), logger_("exchange_snapshot_synthesizer.log"),
-       snapshot_socket_(logger_), order_pool_(ME_MAX_ORDER_IDS) {
+       snapshot_socket_(logger_) {
     ASSERT(snapshot_socket_.init(snapshot_ip, iface, snapshot_port,
     /*is_listening*/ false) >= 0,
     "Unable to create snapshot mcast socket. error:" + std::string(std::strerror(errno)));
   }
   void SnapshotSynthesizer::start() {
     run_ = true;
-    ASSERT(Common::createAndStartThread(-1, "Exchange/
-    SnapshotSynthesizer", [this]() { run(); }) != nullptr,
+    ASSERT(Common::createAndStartThread(-1, "Exchange/SnapshotSynthesizer", [this]() { run(); }) != nullptr,
            "Failed to start SnapshotSynthesizer thread.");
   }
   SnapshotSynthesizer::~SnapshotSynthesizer() {
@@ -24,7 +22,7 @@ namespace Exchange {
     run_ = false;
   }
 
-  auto SnapshotSynthesizer::addToSnapshot(const MDPMarketUpdate* market_update) {
+  auto SnapshotSynthesizer::addToSnapshot(const MDPMarketUpdate* market_update) -> void {
     const auto &me_market_update = market_update->me_market_update_;
     auto *orders = &ticker_orders_.at(me_market_update.ticker_id_);
     switch (me_market_update.type_) {
@@ -58,7 +56,7 @@ namespace Exchange {
     last_inc_seq_num_ = market_update->seq_num_;
   }
 
-  auto SnapshotSynthesizer::publishSnapshot() {
+  auto SnapshotSynthesizer::publishSnapshot() -> void {
     size_t snapshot_size = 0;
     const MDPMarketUpdate start_market_update{snapshot_size++, 
       {MarketUpdateType::SNAPSHOT_START, last_inc_seq_num_}};
@@ -75,8 +73,8 @@ namespace Exchange {
       for (const auto order: orders) {
         if (order) {
           const MDPMarketUpdate market_update{snapshot_size++, *order};
-          logger_.log("%:% %() % %\n", __FILE__, __LINE__, __
-            FUNCTION__, getCurrentTimeStr(&time_str_), market_update.
+          logger_.log("%:% %() % %\n", __FILE__, __LINE__,
+            __FUNCTION__, getCurrentTimeStr(&time_str_), market_update.
             toString());
           snapshot_socket_.send(&market_update, sizeof(MDPMarketUpdate));
           snapshot_socket_.sendAndRecv();
@@ -97,8 +95,8 @@ namespace Exchange {
       getCurrentTimeStr(&time_str_));
     while (run_) {
       // drain the q
-      for (auto market_update = snapshot_md_updates_->getNextToRead();market_update; 
-      market_update = (snapshot_md_updates->updateReadIndex() ,snapshot_md_updates_->getNextToRead())) {
+      for (auto market_update = snapshot_md_updates_->getNextReadTo();market_update;
+      market_update = (snapshot_md_updates_->updateReadIndex() ,snapshot_md_updates_->getNextReadTo())) {
         logger_.log("%:% %() % Processing %\n", __FILE__, __LINE__,
         __FUNCTION__, getCurrentTimeStr(&time_str_),
                     market_update->toString().c_str());

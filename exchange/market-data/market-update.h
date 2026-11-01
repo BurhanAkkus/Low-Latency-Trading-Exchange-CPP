@@ -14,6 +14,7 @@ namespace Exchange{
         MODIFY = 2,
         CANCEL = 3,
         TRADE = 4,
+        CLEAR = 5,
         SNAPSHOT_START = 6,
         SNAPSHOT_END = 7
     };
@@ -29,6 +30,8 @@ namespace Exchange{
                 return "CANCEL";
             case MarketUpdateType::TRADE:
                 return "TRADE";
+            case MarketUpdateType::CLEAR:
+                return "CLEAR";
             case MarketUpdateType::SNAPSHOT_START:
                 return "SNAPSHOT_START";
             case MarketUpdateType::SNAPSHOT_END:
