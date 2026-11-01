@@ -64,14 +64,14 @@ namespace Common{
         // number of ready to interact sockets.
         const int n = epoll_wait(efd_, events_, max_events, 0);
         // iterate over each.
-        bool have_new_connection = false;
+        bool has_new_connection{false};
         for (int i = 0; i < n; ++i) {
             epoll_event &event = events_[i];
             // event.data.ptr points to the socket during epoll_add.
             auto socket = reinterpret_cast<TCPSocket*>(event.data.ptr);
             // The listener is readable when connections are waiting to be accepted.
             if (UNLIKELY(socket == &listener_socket_)) {
-                have_new_connection = true;
+                has_new_connection = true;
                 continue;
             }
             // Something to read, or the peer closed: recv returns 0.
@@ -81,29 +81,19 @@ namespace Common{
             // The connection is gone.
             if (event.events & (EPOLLERR | EPOLLHUP)) disconnected_sockets_.insert(socket);
         }
-        while (have_new_connection) {
+        if(has_new_connection) {
             sockaddr_storage sockaddr_;
             socklen_t socklen = sizeof(sockaddr_);
             auto fd = accept(listener_socket_.fd_,reinterpret_cast<sockaddr*>(&sockaddr_),&socklen);
-            // Ignore errors. Assume accept never fails when there is a pending connection.
-            // ToDo
-            // error log. 
-            if (fd == -1){
-                break;
-            }
             // No room for another connection: refuse it.
             if (UNLIKELY(sockets_.size() >= ME_MAX_NUM_CLIENTS)) {
                 logger_.log("%:% %() % refused socket:%, % connections open\n",
                     __FILE__, __LINE__, __FUNCTION__,
                     Common::getCurrentTimeStr(&time_str_), fd, sockets_.size());
                 close(fd);
-                continue;
             }
             ASSERT(setNoDelay(fd) && setNonBlocking(fd),
             "Failed to set fd to no delay and non blocking" + std::to_string(fd));
-            // logger_.log("%:% %() % accepted socket:%\n",
-            //     __FILE__, __LINE__, __FUNCTION__,
-            //     Common::getCurrentTimeStr(&time_str_), fd);
             // ToDo
             // dynamic allocation of TCPSocket..
             // migrate to MemoryPool if required in critical path

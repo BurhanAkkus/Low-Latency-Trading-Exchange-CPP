@@ -32,7 +32,7 @@ namespace Exchange{
     // Writes the responses to the clients' send buffers and sends them.
     auto OrderServer::sendClientResponses() noexcept -> void {
         // ToDo - improvement
-        // send all of them together as a memcpy operation.
+        // group into clients and send them all together in a single write.
         for (auto client_response = client_responses_->getNextReadTo();
                 client_response; client_response = (client_responses_->updateReadIndex(),client_responses_->getNextReadTo())) {
             auto socket = client_to_port_[client_response->client_id_];
