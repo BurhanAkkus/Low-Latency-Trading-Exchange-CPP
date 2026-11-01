@@ -89,6 +89,14 @@ namespace Common{
             if (fd == -1){
                 break;
             }
+            // No room for another connection: refuse it.
+            if (UNLIKELY(sockets_.size() >= ME_MAX_NUM_CLIENTS)) {
+                logger_.log("%:% %() % refused socket:%, % connections open\n",
+                    __FILE__, __LINE__, __FUNCTION__,
+                    Common::getCurrentTimeStr(&time_str_), fd, sockets_.size());
+                close(fd);
+                continue;
+            }
             ASSERT(setNoDelay(fd) && setNonBlocking(fd),
             "Failed to set fd to no delay and non blocking" + std::to_string(fd));
             // logger_.log("%:% %() % accepted socket:%\n",

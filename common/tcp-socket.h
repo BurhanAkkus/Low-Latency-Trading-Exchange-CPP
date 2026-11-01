@@ -12,6 +12,9 @@ namespace Common {
     size_t next_rcv_valid_index_ = 0;
     bool send_disconnected_ = false;
     bool recv_disconnected_ = false;
+    // The socket's place in each of the server's SocketLists, -1 when it isn't in it.
+    int receive_index_ = -1;
+    int send_index_ = -1;
     struct sockaddr_in inInAddr;
     std::function<void(TCPSocket *s, Nanos rx_time)>recv_callback_;
     std::string time_str_;
