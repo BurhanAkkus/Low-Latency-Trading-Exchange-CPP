@@ -5,8 +5,7 @@ namespace Common {
     auto TCPSocket::connect(const std::string &ip, const
         std::string &iface, int port, bool is_listening) -> int {
         TCPSocket::destroy();
-        fd_ = createSocket(logger_, ip, iface, port, false,
-        false, is_listening, 0, true);
+        fd_ = createSocket(logger_, SocketCfg{ip, iface, port, false, is_listening, true});
         // wahats inInAddr doing?
         inInAddr.sin_addr.s_addr = INADDR_ANY;
         inInAddr.sin_port = htons(port);

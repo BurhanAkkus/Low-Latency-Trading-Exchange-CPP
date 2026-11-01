@@ -22,11 +22,10 @@ namespace Exchange {
             // copy the whole memory instead of 1 by 1.
             for (auto market_update = outgoing_md_updates_->getNextReadTo();
                     market_update; market_update = (outgoing_md_updates_->updateReadIndex() ,outgoing_md_updates_->getNextReadTo())) {
-                incremental_socket_.send(&next_inc_seq_num_, sizeof(next_inc_seq_num_));
-                incremental_socket_.send(market_update,sizeof(MEMarketUpdate));
-                auto next_write = snapshot_md_updates_.getNextWriteTo();
-                next_write->seq_num_ = next_inc_seq_num_;
-                next_write->me_market_update_ = *market_update;
+                // One send() per message: a message never spans two datagrams.
+                const MDPMarketUpdate update{next_inc_seq_num_, *market_update};
+                incremental_socket_.send(&update, sizeof(update));
+                *snapshot_md_updates_.getNextWriteTo() = update;
                 snapshot_md_updates_.updateWriteIndex();
                 ++next_inc_seq_num_;
             }

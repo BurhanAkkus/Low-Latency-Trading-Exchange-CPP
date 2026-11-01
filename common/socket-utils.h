@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <unordered_set>
 #include <sys/epoll.h>
@@ -17,11 +18,28 @@
 #include "logging.h"
 #include "time-utils.h"
 namespace Common {
+  struct SocketCfg {
+    std::string ip_;
+    std::string iface_;
+    int port_ = -1;
+    bool is_udp_ = false;
+    bool is_listening_ = false;
+    bool needs_so_timestamp_ =  false;
+
+    auto toString() const {
+      std::stringstream ss;
+      ss << "SocketCfg[ip:" << ip_
+      << " iface:" << iface_
+      << " port:" << port_
+      << " is_udp:" << is_udp_
+      << " is_listening:" << is_listening_
+      << " needs_SO_timestamp:" << needs_so_timestamp_
+      << "]";
+
+      return ss.str();
+    }
+  };
   constexpr int MaxTCPServerBacklog = 1024;
-  inline auto createSocket(Logger &logger, const std::string
-    &t_ip, const std::string &iface, int port, bool is_udp,
-    bool is_blocking, bool is_listening, int ttl, bool
-    needs_so_timestamp) -> int;
 
   // gets the socket addr of network interface with name iface.
   inline auto getIfaceIP(const std::string &iface) -> std::string {
@@ -85,19 +103,30 @@ namespace Common {
     return (setsockopt(fd, SOL_SOCKET, SO_TIMESTAMP,
       reinterpret_cast<void *>(&one), sizeof(one)) != -1);
   }
+  // Multicast from fd goes out on iface, not on the interface the route to the group picks.
+  // Set before connect(), connect() fixes the route.
+  inline auto setMcastIface(int fd, const std::string &iface) -> bool {
+    const in_addr addr{inet_addr(getIfaceIP(iface).c_str())};
+    return (setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr)) != -1);
+  }
+  // Subscribes fd to the multicast group ip on iface, the interface the publisher sends on.
+  inline auto join(int fd, const std::string &ip, const std::string &iface) -> bool {
+    const ip_mreq mreq{{inet_addr(ip.c_str())}, {inet_addr(getIfaceIP(iface).c_str())}};
+    return (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) != -1);
+  }
 
-  inline auto createSocket(Logger &logger, const std::string&t_ip,
-    const std::string &iface, int port,
-    bool is_udp, bool is_blocking, bool
-    is_listening, int ttl, bool
-    needs_so_timestamp) -> int {
+  inline auto createSocket(Logger &logger, SocketCfg socket_cfg) -> int {
     std::string time_str;
+    const std::string&t_ip{socket_cfg.ip_};
+    const std::string &iface{socket_cfg.iface_};
+    int port{socket_cfg.port_};
+    bool is_udp{socket_cfg.is_udp_};
+    bool is_listening{socket_cfg.is_listening_};
+    bool needs_so_timestamp{socket_cfg.needs_so_timestamp_};
     const auto ip = t_ip.empty() ? getIfaceIP(iface) : t_ip;
-    logger.log("%:% %() % ip:% iface:% port:% is_udp:% is_blocking:% is_listening:% ttl:% SO_time:%\n",
+    logger.log("%:% %() % ip:% cfg:%\n",
         __FILE__, __LINE__, __FUNCTION__,
-              Common::getCurrentTimeStr(&time_str), ip,
-                iface, port, is_udp, is_blocking,
-                  is_listening, ttl, needs_so_timestamp);
+              Common::getCurrentTimeStr(&time_str), ip, socket_cfg.toString());
     addrinfo hints{};
     hints.ai_family = AF_INET; // IPv4 only.
     hints.ai_socktype = is_udp ? SOCK_DGRAM : SOCK_STREAM;
@@ -121,15 +150,19 @@ namespace Common {
         return -1;
       }
     
-      if (!is_blocking) {
-        if (!setNonBlocking(fd)) {
-          logger.log("setNonBlocking() failed. errno:%\n",strerror(errno));
-          return -1;
-        }
-        if (!is_udp && !setNoDelay(fd)) {
-          logger.log("setNoDelay() failed. errno:%\n",strerror(errno));
-          return -1;
-        }
+      // Every socket is polled, none may block.
+      if (!setNonBlocking(fd)) {
+        logger.log("setNonBlocking() failed. errno:%\n",strerror(errno));
+        return -1;
+      }
+      if (!is_udp && !setNoDelay(fd)) {
+        logger.log("setNoDelay() failed. errno:%\n",strerror(errno));
+        return -1;
+      }
+      // All clients are local: multicast is published on iface (lo), not over the network.
+      if (is_udp && !is_listening && !setMcastIface(fd, iface)) {
+        logger.log("setMcastIface() failed. errno:%\n", strerror(errno));
+        return -1;
       }
       if (needs_so_timestamp && !setSOTimestamp(fd)) {
         logger.log("setSOTimestamp() failed. errno:%\n", strerror(errno));

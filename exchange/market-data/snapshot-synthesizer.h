@@ -20,6 +20,6 @@ namespace Exchange {
     std::array<std::array<MEMarketUpdate *, ME_MAX_ORDER_IDS>,ME_MAX_TICKERS> ticker_orders_;
     size_t last_inc_seq_num_ = 0;
     Nanos last_snapshot_time_ = 0;
-    MemPool<MEMarketUpdate> order_pool_;
+    MemoryPool<MEMarketUpdate, ME_MAX_MARKET_UPDATES> order_pool_;
   };
 }
