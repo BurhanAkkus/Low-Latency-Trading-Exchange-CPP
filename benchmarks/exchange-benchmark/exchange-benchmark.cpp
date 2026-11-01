@@ -189,14 +189,21 @@ namespace {
 
   auto key(uint64_t ticker_id, uint64_t market_order_id) noexcept { return (ticker_id << 32) | market_order_id; }
 
-  // Prints p50 / p90 / p99 / p99.9 / max in microseconds.
-  auto printPercentiles(const char* name, std::vector<int64_t>& v) {
-    printf("%-34s", name);
-    if (v.empty()) { printf(" no samples\n"); return; }
+  // p50 / p90 / p99 / p99.9 / max in microseconds, sorts v.
+  auto percentiles(std::vector<int64_t>& v) {
+    std::array<double, 5> p{};
+    if (v.empty()) return p;
     std::sort(v.begin(), v.end());
-    for (const double p : {0.5, 0.9, 0.99, 0.999})
-      printf(" %9.1f", v[std::min(v.size() - 1, static_cast<size_t>(p * v.size()))] / 1000.0);
-    printf(" %9.1f  (%zu samples)\n", v.back() / 1000.0, v.size());
+    const double at[] = {0.5, 0.9, 0.99, 0.999};
+    for (size_t i = 0; i < 4; ++i) p[i] = v[std::min(v.size() - 1, static_cast<size_t>(at[i] * v.size()))] / 1000.0;
+    p[4] = v.back() / 1000.0;
+    return p;
+  }
+
+  auto printPercentiles(const char* name, const std::array<double, 5>& p, size_t samples) {
+    printf("%-34s", name);
+    for (const auto x : p) printf(" %9.1f", x);
+    printf("  (%zu samples)\n", samples);
   }
 }
 
@@ -212,7 +219,8 @@ int main(int argc, char** argv) {
   std::vector<int> fds(cfg.clients + 1, -1);
   for (size_t c = 1; c <= cfg.clients; ++c) fds[c] = connectClient();
 
-  Logger logger("exchange_benchmark.log");
+  // Not exchange*.log: perf-analysis.py reads those for the engine's measurements.
+  Logger logger("benchmark_client.log");
   std::atomic<bool> run{true};
 
   // Market data: every update's arrival, seq numbers checked for gaps (lost datagrams).
@@ -311,7 +319,9 @@ int main(int argc, char** argv) {
   receiver_thread->join();
   md_thread->join();
 
-  // Responses to requests.
+  // Responses to requests. The first 10% of requests are warm-up, left out of the latency, as in
+  // the matching engine benchmark.
+  const size_t warmup = n / 10;
   std::vector<int64_t> response_latency, md_latency, lag;
   response_latency.reserve(n);
   std::unordered_map<uint64_t, int64_t> first_update[2];  // [0] ADD, [1] CANCEL: arrival per (ticker, market order id)
@@ -320,25 +330,33 @@ int main(int argc, char** argv) {
   for (const auto& r : responses) {
     const bool for_new = r.type == ClientResponseType::ACCEPTED || r.type == ClientResponseType::REJECTED;
     const auto i = (for_new ? requests.new_index : requests.cancel_index)[r.client][r.client_order_id];
-    response_latency.push_back(r.time - sent_at[i]);
     last_final = std::max(last_final, r.time);
+    if (i < warmup) continue;
+    response_latency.push_back(r.time - sent_at[i]);
     // The update the request caused: ADD when a NEW rests, CANCEL when a CANCEL removes the order.
     if (r.type == ClientResponseType::ACCEPTED || r.type == ClientResponseType::CANCELED) {
       const auto& first = first_update[r.type == ClientResponseType::CANCELED];
       if (const auto it = first.find(key(r.ticker_id, r.market_order_id)); it != first.end()) md_latency.push_back(it->second - sent_at[i]);
     }
   }
-  for (size_t i = 0; i < n; ++i) lag.push_back(sent_at[i] - due(i));
+  for (size_t i = warmup; i < n; ++i) lag.push_back(sent_at[i] - due(i));
 
   const double send_secs = (sent_at[n - 1] - sent_at[0]) / 1e9, run_secs = (last_final - sent_at[0]) / 1e9;
   printf("sent %zu requests in %.2f s (%.0f/s)\n", n, send_secs, n / send_secs);
   printf("answered %zu of %zu, %zu fills, tcp seq gaps %zu; market data: %zu updates, %zu lost\n",
          responses.size(), n, fills, tcp_gaps, md_updates, md_lost);
   printf("exchange throughput: %.0f requests/s, %.0f market updates/s\n", responses.size() / run_secs, md_updates / run_secs);
-  printf("%-34s %9s %9s %9s %9s %9s\n", "latency (us)", "p50", "p90", "p99", "p99.9", "max");
-  printPercentiles("request -> final response", response_latency);
-  printPercentiles("request -> ADD / CANCEL update", md_latency);
-  printPercentiles("schedule lag (sender behind)", lag);
+  const auto response_p = percentiles(response_latency), md_p = percentiles(md_latency), lag_p = percentiles(lag);
+  printf("%-34s %9s %9s %9s %9s %9s\n", "latency (us), after warm-up", "p50", "p90", "p99", "p99.9", "max");
+  printPercentiles("request -> final response", response_p, response_latency.size());
+  printPercentiles("request -> ADD / CANCEL update", md_p, md_latency.size());
+  printPercentiles("schedule lag (sender behind)", lag_p, lag.size());
+  // For run-exchange-benchmark.sh: rates and counts, then p50 p90 p99 p99.9 max of each latency.
+  printf("csv:%.0f,%zu,%zu,%zu,%.0f,%.0f", n / send_secs, responses.size(), tcp_gaps, md_lost,
+         responses.size() / run_secs, md_updates / run_secs);
+  for (const auto& p : {response_p, md_p, lag_p})
+    for (const auto x : p) printf(",%.1f", x);
+  printf("\n");
   for (size_t c = 1; c <= cfg.clients; ++c) close(fds[c]);
   return responses.size() == n && !tcp_gaps ? EXIT_SUCCESS : EXIT_FAILURE;
 }

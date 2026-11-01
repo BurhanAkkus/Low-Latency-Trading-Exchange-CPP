@@ -50,9 +50,13 @@ namespace {
 }
 
 int main(int argc, char **argv) {
+    // First, a signal before this stops the process with nothing to clean up yet. SIGTERM too: a
+    // script's background commands ignore SIGINT until a handler is set, run-exchange-benchmark.sh
+    // stops the exchange with SIGTERM.
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
     const auto cores = parseArgs(argc, argv);
     logger = new Common::Logger("exchange_main.log");
-    std::signal(SIGINT, signal_handler);
     const int sleep_time = 100 * 1000;
     // Communication queues.
     Exchange::ClientRequestLFQueue client_requests;
@@ -79,7 +83,7 @@ int main(int argc, char **argv) {
     order_server = new Exchange::OrderServer(&client_requests, &client_responses, order_gw_iface, order_gw_port);
     order_server->start(cores.order_server);
     // Heartbeat
-    // usleep returns early when SIGINT arrives, so shutdown is not delayed by the sleep.
+    // usleep returns early when SIGINT or SIGTERM arrives, so shutdown is not delayed by the sleep.
     while (!shutdown_requested) {
         logger->log("%:% %() % Sleeping for a few milliseconds..\n", __FILE__, __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str));
         usleep(sleep_time * 1000);
