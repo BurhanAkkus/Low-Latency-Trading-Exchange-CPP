@@ -51,6 +51,8 @@ namespace Common{
         // events_ has size 1024. can't write past it.
         const int max_events = std::min(1 + sockets_.size(), 1024ul);
         // drop disconnected sockets to reduce runtime down the function.
+        // ToDo - improve
+        // keep them in order to reduce search time.
         for (auto socket: disconnected_sockets_) {
             TCPServer::del(socket);
             // stalls thread.
@@ -70,35 +72,35 @@ namespace Common{
                 // if its a new connection
                 if(UNLIKELY(socket == &listener_socket_)){
                     //set have_new_connection
-                    logger_.log("%:% %() % EPOLLIN listener_socket:%\n", 
-                        __FILE__, __LINE__, __FUNCTION__, 
-                    Common::getCurrentTimeStr(&time_str_), socket->fd_);
+                    // logger_.log("%:% %() % EPOLLIN listener_socket:%\n", 
+                    //     __FILE__, __LINE__, __FUNCTION__, 
+                    // Common::getCurrentTimeStr(&time_str_), socket->fd_);
                     have_new_connection = true;
                     continue;
                 }
-                logger_.log("%:% %() % EPOLLIN socket:%\n",
-                    __FILE__, __LINE__, __FUNCTION__,
-                    Common::getCurrentNanos(), 
-                    socket->fd_);
+                // logger_.log("%:% %() % EPOLLIN socket:%\n",
+                //     __FILE__, __LINE__, __FUNCTION__,
+                //     Common::getCurrentNanos(), 
+                //     socket->fd_);
                 // add to receive sockets
                 if(std::find(receive_sockets_.begin(),receive_sockets_.end(), socket) == receive_sockets_.end())
                     receive_sockets_.push_back(socket);
             }
             // if event is EPOLLOUT
             if(event.events & EPOLLOUT){
-                logger_.log("%:% %() % EPOLLOUT socket:%\n",
-                    __FILE__, __LINE__, __FUNCTION__,
-                    Common::getCurrentNanos(), 
-                    socket->fd_);
+                // logger_.log("%:% %() % EPOLLOUT socket:%\n",
+                //     __FILE__, __LINE__, __FUNCTION__,
+                //     Common::getCurrentNanos(), 
+                //     socket->fd_);
                 // add to send sockets
                 if(std::find(send_sockets_.begin(),send_sockets_.end(), socket) == send_sockets_.end())
                     send_sockets_.push_back(socket);
             }
             // if connection is dropped
             if (event.events & (EPOLLERR | EPOLLHUP)) {
-                logger_.log("%:% %() % EPOLLERR socket:%\n",
-                __FILE__, __LINE__, __FUNCTION__,
-                    Common::getCurrentTimeStr(&time_str_), socket->fd_);
+                // logger_.log("%:% %() % EPOLLERR socket:%\n",
+                // __FILE__, __LINE__, __FUNCTION__,
+                //     Common::getCurrentTimeStr(&time_str_), socket->fd_);
                 if(std::find(disconnected_sockets_.begin(),
                     disconnected_sockets_.end(), socket) ==
                     disconnected_sockets_.end())
@@ -117,9 +119,9 @@ namespace Common{
             }
             ASSERT(setNoDelay(fd) && setNonBlocking(fd),
             "Failed to set fd to no delay and non blocking" + std::to_string(fd));
-            logger_.log("%:% %() % accepted socket:%\n",
-                __FILE__, __LINE__, __FUNCTION__,
-                Common::getCurrentTimeStr(&time_str_), fd);
+            // logger_.log("%:% %() % accepted socket:%\n",
+            //     __FILE__, __LINE__, __FUNCTION__,
+            //     Common::getCurrentTimeStr(&time_str_), fd);
             // ToDo
             // dynamic allocation of TCPSocket..
             // migrate to MemoryPool if required in critical path
