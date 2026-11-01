@@ -5,6 +5,9 @@ using namespace Common;
 namespace Exchange{
     void FIFOSequencer::publishOutputs() noexcept{
             incoming_requests_->updateWriteIndex(poll_results_size_);
+            // In the request queue, the engine can read them from here on.
+            for (size_t i = 0; i < poll_results_size_; i++)
+                TRACE(T2, traceKey(poll_results_[i].request_), (*logger_));
             poll_results_size_ = 0;
         }
     void FIFOSequencer::publishReceived() noexcept{

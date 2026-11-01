@@ -27,6 +27,16 @@ namespace Common{
         __asm__ __volatile__ ("rdtscp\n\tlfence" : "=a" (lo), "=d" (hi) :: "rcx", "memory");
         return (static_cast<uint64_t>(hi) << 32) | lo;
     }
+
+    // Trace keys, see TRACE. A request: client id, client order id and whether it is a CANCEL (the
+    // NEW and the CANCEL of one order share the order id). A market update: ticker, market order
+    // id and whether it is a CANCEL (else an ADD).
+    constexpr auto requestKey(uint64_t client_id, uint64_t client_order_id, bool cancel) noexcept {
+        return (client_id << 32) | (client_order_id << 1) | cancel;
+    }
+    constexpr auto updateKey(uint64_t ticker_id, uint64_t market_order_id, bool cancel) noexcept {
+        return (ticker_id << 40) | (market_order_id << 1) | cancel;
+    }
 }
 
 // LOGGER is a Logger (not a pointer).
@@ -46,6 +56,15 @@ namespace Common{
     do {                                                                                        \
         const auto end = Common::rdtscEnd();                                                    \
         LOGGER.log(#TAG " %\n", (end - TAG));                                                   \
+    } while(false)
+
+// Per-request tracing: every stage of a request's path logs "<TAG> <key> <tsc>\n" (5 log
+// elements, ~40 ns), scripts/trace-analysis.py joins the stages by key. The TSC is one clock for
+// all cores and processes, so stages logged by different threads and by the benchmark's clients
+// compare directly. Comment a TRACE out to remove that stage.
+#define TRACE(TAG, KEY, LOGGER)                                                                 \
+    do {                                                                                        \
+        LOGGER.log(#TAG " % %\n", static_cast<uint64_t>(KEY), Common::rdtsc());                 \
     } while(false)
 
 // Time-to-tick: log the current nanosecond timestamp at a hop on the order's path.

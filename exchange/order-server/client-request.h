@@ -3,6 +3,7 @@
 #include "common/macros.h"
 #include "common/constants.h"
 #include "common/lf-queue.h"
+#include "common/perf-utils.h"
 #include <sstream>
 using namespace Common;
 
@@ -65,4 +66,8 @@ namespace Exchange{
     };
 #pragma pack(pop)
 using ClientRequestLFQueue = LFQueue<MEClientRequest, ME_MAX_CLIENT_UPDATES>;
+    // The request's key for TRACE (common/perf-utils.h).
+    inline auto traceKey(const MEClientRequest &request) noexcept {
+        return requestKey(request.client_id_, request.order_id_, request.type_ == ClientRequestType::CANCEL);
+    }
 }

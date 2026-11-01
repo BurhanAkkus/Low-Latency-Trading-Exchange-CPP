@@ -11,7 +11,7 @@ namespace Exchange{
                 logger_("exchange_order_server.log"),
                 tcp_server_{logger_, [this](auto socket, auto rx_time) { recvCallback(socket, rx_time); },
                     [this]() { recvFinishedCallback(); }},
-                fifo_sequencer_(client_requests, [this]() { sendClientResponses(); }){
+                fifo_sequencer_(client_requests, &logger_, [this]() { sendClientResponses(); }){
                     cid_next_outgoing_seq_num_.fill(1);
                     cid_next_expected_seq_num_.fill(1);
                     client_to_port_.fill(nullptr);
@@ -24,11 +24,9 @@ namespace Exchange{
 
     auto OrderServer::run() noexcept -> void {
       while (run_) {
-        START_MEASURE(OS_loop);
         tcp_server_.poll();
         tcp_server_.sendAndRecv();
         sendClientResponses();
-        END_MEASURE(OS_loop, logger_);
         }
     }
     // Writes the responses to the clients' send buffers, the next sendAndRecv() sends them.
@@ -38,6 +36,9 @@ namespace Exchange{
         for (auto client_response = client_responses_->getNextReadTo();
                 client_response; client_response = (client_responses_->updateReadIndex(),client_responses_->getNextReadTo())) {
             if(UNLIKELY(client_to_port_[client_response->client_id_] == nullptr)){continue;}
+            // Final responses only: a fill isn't the end of a request.
+            if (client_response->type_ != ClientResponseType::FILLED)
+                TRACE(T5, traceKey(*client_response), logger_);
             auto &next_outgoing_seq_num = cid_next_outgoing_seq_num_[client_response->client_id_];
             client_to_port_[client_response->client_id_]->send(&next_outgoing_seq_num, sizeof(next_outgoing_seq_num));
             client_to_port_[client_response->client_id_]->send(client_response, sizeof(MEClientResponse));

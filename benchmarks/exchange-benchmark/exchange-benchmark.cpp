@@ -173,6 +173,7 @@ namespace {
 
   struct Response {
     int64_t time;
+    uint64_t tsc;  // the same moment on the exchange's TRACE clock, for scripts/trace-analysis.py
     uint32_t client_order_id;
     uint32_t market_order_id;
     uint8_t client;
@@ -182,6 +183,7 @@ namespace {
 
   struct Update {
     int64_t time;
+    uint64_t tsc;
     uint32_t order_id;
     uint8_t ticker_id;
     MarketUpdateType type;
@@ -232,6 +234,7 @@ int main(int argc, char** argv) {
   size_t md_updates = 0, md_lost = 0, md_next_seq = 0;
   md_socket.recv_callback_ = [&](McastSocket* s) {
     const auto time = now();
+    const auto tsc = Common::rdtsc();
     for (size_t off = 0; off + sizeof(MDPMarketUpdate) <= s->next_rcv_valid_index_; off += sizeof(MDPMarketUpdate)) {
       MDPMarketUpdate u;
       memcpy(&u, s->inbound_data_.data() + off, sizeof(u));
@@ -240,7 +243,7 @@ int main(int argc, char** argv) {
       ++md_updates;
       const auto& m = u.me_market_update_;
       if (m.type_ == MarketUpdateType::ADD || m.type_ == MarketUpdateType::CANCEL)
-        updates.push_back({time, static_cast<uint32_t>(m.order_id_), static_cast<uint8_t>(m.ticker_id_), m.type_});
+        updates.push_back({time, tsc, static_cast<uint32_t>(m.order_id_), static_cast<uint8_t>(m.ticker_id_), m.type_});
     }
     s->next_rcv_valid_index_ = 0;
   };
@@ -273,6 +276,7 @@ int main(int argc, char** argv) {
         const auto got = ::recv(fds[c], b.data + b.size, sizeof(b.data) - b.size, 0);
         if (got <= 0) continue;
         const auto time = now();
+        const auto tsc = Common::rdtsc();
         b.size += got;
         size_t off = 0;
         for (; off + sizeof(OMClientResponse) <= b.size; off += sizeof(OMClientResponse)) {
@@ -283,7 +287,7 @@ int main(int argc, char** argv) {
           const auto& m = r.me_client_response_;
           if (m.type_ == ClientResponseType::FILLED) { ++fills; continue; }
           if (!isFinal(m.type_)) continue;
-          responses.push_back({time, static_cast<uint32_t>(m.client_order_id_), static_cast<uint32_t>(m.market_order_id_),
+          responses.push_back({time, tsc, static_cast<uint32_t>(m.client_order_id_), static_cast<uint32_t>(m.market_order_id_),
                                static_cast<uint8_t>(c), static_cast<uint8_t>(m.ticker_id_), m.type_});
           finals.fetch_add(1, std::memory_order_relaxed);
         }
@@ -297,6 +301,7 @@ int main(int argc, char** argv) {
 
   // Sender: request i goes out at start + i / rate.
   std::vector<int64_t> sent_at(n);
+  std::vector<uint64_t> sent_tsc(n);
   const int64_t start = now() + 100'000'000;  // the other threads are running by then.
   auto due = [&](size_t i) { return start + static_cast<int64_t>(i * 1e9 / cfg.rate); };
   auto sender_thread = createAndStartThread(cfg.sender_core, "Benchmark/Sender", [&]() {
@@ -305,6 +310,7 @@ int main(int argc, char** argv) {
       while (now() < at) __builtin_ia32_pause();
       const auto& r = requests.stream[i];
       sent_at[i] = now();  // the request goes into its TCP connection.
+      sent_tsc[i] = Common::rdtsc();
       sendAll(fds[r.me_client_request_.client_id_], &r, sizeof(r));
     }
   });
@@ -357,6 +363,22 @@ int main(int argc, char** argv) {
   for (const auto& p : {response_p, md_p, lag_p})
     for (const auto x : p) printf(",%.1f", x);
   printf("\n");
+
+  // This side's stages of every request for scripts/trace-analysis.py, like the exchange's TRACE
+  // lines: C0 sent, C7 final response, C7m the ADD / CANCEL update, LINK which update a request
+  // caused (from its ACCEPTED / CANCELED). C0 is in send order.
+  if (FILE* trace = fopen("benchmark_trace.log", "w")) {
+    for (size_t i = 0; i < n; ++i) fprintf(trace, "C0 %lu %lu\n", traceKey(requests.stream[i].me_client_request_), sent_tsc[i]);
+    for (const auto& r : responses) {
+      const bool cancel = r.type == ClientResponseType::CANCELED || r.type == ClientResponseType::CANCEL_REJECTED;
+      const auto request = requestKey(r.client, r.client_order_id, cancel);
+      fprintf(trace, "C7 %lu %lu\n", request, r.tsc);
+      if (r.type == ClientResponseType::ACCEPTED || r.type == ClientResponseType::CANCELED)
+        fprintf(trace, "LINK %lu %lu\n", request, updateKey(r.ticker_id, r.market_order_id, cancel));
+    }
+    for (const auto& u : updates) fprintf(trace, "C7m %lu %lu\n", updateKey(u.ticker_id, u.order_id, u.type == MarketUpdateType::CANCEL), u.tsc);
+    fclose(trace);
+  }
   for (size_t c = 1; c <= cfg.clients; ++c) close(fds[c]);
   return responses.size() == n && !tcp_gaps ? EXIT_SUCCESS : EXIT_FAILURE;
 }

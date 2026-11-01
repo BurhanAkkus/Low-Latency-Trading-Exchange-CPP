@@ -14,8 +14,8 @@
 # the send rate, answered requests, tcp seq gaps, lost market updates, the exchange's requests/s
 # and market updates/s, and p50 p90 p99 p99.9 max in us of request -> final response, of
 # request -> ADD / CANCEL update and of the sender's schedule lag. Latencies leave out the first
-# 10% of requests. The exchange's own measurements (START_MEASURE / TTT_MEASURE in its logs) are
-# printed after the row, not recorded.
+# 10% of requests. After the row, scripts/trace-analysis.py prints each stage of a request's path
+# through the exchange (not recorded).
 #
 # Usage:   run-exchange-benchmark.sh [benchmark options]
 #          run-exchange-benchmark.sh --rate 200000 --clients 64
@@ -52,16 +52,6 @@ if ss -ltn | grep -q ":$PORT "; then
     echo "port $PORT is in use, is an exchange still running?" >&2
     exit 1
 fi
-
-# Requests = rate * seconds, the first 10% are the engine's warm-up too. The benchmark's defaults.
-rate=100000
-seconds=10
-args=("$@")
-for ((i = 0; i + 1 < ${#args[@]}; i++)); do
-    [[ ${args[i]} == --rate ]] && rate=${args[i + 1]}
-    [[ ${args[i]} == --seconds ]] && seconds=${args[i + 1]}
-done
-requests=$((rate * seconds))
 
 # The exchange writes its logs to the current directory.
 mkdir -p "$DIR"
@@ -124,6 +114,6 @@ fi
 echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$result" >> "$RESULTS"
 echo "recorded in $RESULTS"
 
-# The exchange's own measurements, its logs are complete once it has stopped. Printed only, and a
-# run without any (or without one to find the warm-up by) is still recorded.
-python3 "$REPO/scripts/perf-analysis.py" --skip-first $((requests / 10)) || true
+# Where requests spend their time, from the exchange's TRACE lines and the benchmark's
+# benchmark_trace.log, complete once the exchange has stopped. Printed only, not recorded.
+python3 "$REPO/scripts/trace-analysis.py" || true

@@ -47,9 +47,11 @@ namespace Exchange{
                     // request points to the socket's data.
                     auto request = reinterpret_cast<const OMClientRequest*>(socket->rcv_buffer_ + i);
                     // Check if this is the first request from this client.
-                    if (UNLIKELY(client_to_port_[request->me_client_request_.client_id_] 
+                    if (UNLIKELY(client_to_port_[request->me_client_request_.client_id_]
                         == nullptr)) {
                             client_to_port_[request->me_client_request_.client_id_] = socket;
+                            // The client's socket: T6 is logged per socket send, by fd.
+                            TRACE(T6fd, (request->me_client_request_.client_id_ << 32) | static_cast<uint64_t>(socket->fd_), logger_);
                         }
                     // Client is connected to another socket.
                     // ToDo
@@ -76,6 +78,8 @@ namespace Exchange{
                         // send rejected.
                     }
                     next_expected_seq_num++;
+                    // Read from TCP.
+                    TRACE(T1, traceKey(request->me_client_request_), logger_);
                     fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
                 };
                 // copy the last incomplete portion to the beginning.

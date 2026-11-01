@@ -51,10 +51,12 @@ namespace Exchange{
                 //         __LINE__, __FUNCTION__,
                 //         Common::getCurrentNanos(),
                 //         me_client_request->toString());
-                START_MEASURE(ME_req);
+                // Read from the request queue.
+                TRACE(T3, traceKey(*me_client_request), logger_);
                 processClientRequest(me_client_request);
                 publishOutputs();
-                END_MEASURE(ME_req, logger_);
+                // Its responses and market updates are in their queues.
+                TRACE(T4, traceKey(*me_client_request), logger_);
                 incoming_requests_->updateReadIndex();
                 } else if (stopping) {
                     return;

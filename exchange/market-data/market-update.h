@@ -2,6 +2,7 @@
 #include "common/constants.h"
 #include "common/types.h"
 #include "common/lf-queue.h"
+#include "common/perf-utils.h"
 #include <sstream>
 using namespace Common;
 
@@ -78,4 +79,8 @@ namespace Exchange{
 #pragma pack(pop)
 using MEMarketUpdateLFQueue = LFQueue<MEMarketUpdate, ME_MAX_MARKET_UPDATES>;
 using MDPMarketUpdateLFQueue = LFQueue<MDPMarketUpdate,ME_MAX_MARKET_UPDATES>;
+    // An ADD or CANCEL update's key for TRACE (common/perf-utils.h).
+    inline auto traceKey(const MEMarketUpdate &update) noexcept {
+        return updateKey(update.ticker_id_, update.order_id_, update.type_ == MarketUpdateType::CANCEL);
+    }
 }

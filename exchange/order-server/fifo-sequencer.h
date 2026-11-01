@@ -5,7 +5,7 @@
 #include "common/time-utils.h"
 #include "exchange/order-server/client-request.h"
 #include <functional>
-//#include "common/logging.h"
+#include "common/logging.h"
 using namespace Common;
 
 namespace Exchange{
@@ -15,8 +15,8 @@ namespace Exchange{
     // can be inlined.
     class FIFOSequencer{
         public:
-        FIFOSequencer(ClientRequestLFQueue *client_requests, std::function<void()> while_full)//, Logger *logger)
-            : incoming_requests_(client_requests), while_full_(std::move(while_full))//, logger_(logger
+        FIFOSequencer(ClientRequestLFQueue *client_requests, Logger *logger, std::function<void()> while_full)
+            : incoming_requests_(client_requests), logger_(logger), while_full_(std::move(while_full))
             {}
         // ToDo - improvement
         // we lose sort from each socket.
@@ -42,12 +42,13 @@ namespace Exchange{
             }
         };
         ClientRequestLFQueue* incoming_requests_{nullptr};
+        // The order server's, for TRACE.
+        Logger* logger_{nullptr};
         // Called while the request queue is full. The engine frees request slots only while it
         // can write its responses, so the order server keeps reading them here, otherwise both
         // threads wait for each other forever (lf-queue.h caveat 2).
         std::function<void()> while_full_;
         std::string time_str_;
-        //Logger* logger_{nullptr};
         // ToDo - improvement
         // sort only the times from the poll results.
         // Instantiate the objects directly in the client_requests queue instead of here.

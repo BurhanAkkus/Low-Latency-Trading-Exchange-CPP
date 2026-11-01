@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iostream>
 #include "common/lf-queue.h"
+#include "common/perf-utils.h"
 using namespace Common;
 
 namespace Exchange{
@@ -77,4 +78,10 @@ namespace Exchange{
     };
 #pragma pack(pop)
 using ClientResponseLFQueue = LFQueue<MEClientResponse, ME_MAX_CLIENT_UPDATES>;
+    // The key for TRACE (common/perf-utils.h) of the request a final response answers: ACCEPTED and
+    // REJECTED answer a NEW, CANCELED and CANCEL_REJECTED a CANCEL.
+    inline auto traceKey(const MEClientResponse &response) noexcept {
+        return requestKey(response.client_id_, response.client_order_id_,
+                          response.type_ == ClientResponseType::CANCELED || response.type_ == ClientResponseType::CANCEL_REJECTED);
+    }
 }

@@ -1,4 +1,5 @@
 #include "tcp-socket.h"
+#include "perf-utils.h"
 
 namespace Common {
     // Create TCPSocket with provided attributes to either listen-on / connect-to.
@@ -95,6 +96,9 @@ namespace Common {
         if (sent) {
             memmove(send_buffer_, send_buffer_ + sent, next_send_valid_index_ - sent);
             next_send_valid_index_ -= sent;
+            // Sent on TCP. The socket doesn't know which requests its bytes answer: by fd, the
+            // analysis takes the first send after a response's T5.
+            TRACE(T6, fd_, logger_);
         }
         return (n_rcv > 0);
     }
