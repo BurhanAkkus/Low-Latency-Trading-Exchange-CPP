@@ -51,8 +51,13 @@ namespace Common {
         // number of separate buffer segments in msg_iov.
         // we have only 1 receive buffer.
         msg.msg_iovlen = 1;
+        const auto recv_start = Common::rdtsc();
         const auto n_rcv = recvmsg(fd_, &msg, MSG_DONTWAIT);
         if (n_rcv > 0) {
+            // recvmsg on this socket started and returned. By fd, like T6: the analysis takes the
+            // last read before a request's T1.
+            TRACE_AT(R0, fd_, recv_start, logger_);
+            TRACE(R1, fd_, logger_);
             next_rcv_valid_index_ += n_rcv;
             Nanos kernel_time = 0;
             // microsecond resolution in timeval.
@@ -66,12 +71,6 @@ namespace Common {
                 memcpy(&time_kernel, CMSG_DATA(cmsg), sizeof(time_kernel));
                 kernel_time = time_kernel.tv_sec * NANOS_TO_SECS + time_kernel.tv_usec * NANOS_TO_MICROS;
             }
-            const auto user_time = getCurrentNanos();
-            logger_.log("%:% %() % read socket:% len:% utime:% ktime:% diff:%\n",
-                __FILE__, __LINE__,__FUNCTION__,
-                Common::getCurrentNanos(),
-                fd_, next_rcv_valid_index_, user_time,
-                kernel_time, (user_time - kernel_time));
             recv_callback_(this, kernel_time);
         } else if (UNLIKELY(n_rcv == 0 || !wouldBlock())) {
             // 0: the peer closed the connection. An error other than no data: it's gone.
@@ -82,6 +81,7 @@ namespace Common {
     // Send -> write to fd from send buffer.
     auto TCPSocket::flush() noexcept -> void {
         // Sends as much as the kernel takes, the rest stays in the buffer for the next call.
+        const auto send_start = Common::rdtsc();
         size_t sent = 0;
         while (sent < next_send_valid_index_) {
             const auto n = ::send(fd_, send_buffer_ + sent, next_send_valid_index_ - sent, MSG_DONTWAIT | MSG_NOSIGNAL);
@@ -98,7 +98,10 @@ namespace Common {
             memmove(send_buffer_, send_buffer_ + sent, next_send_valid_index_ - sent);
             next_send_valid_index_ -= sent;
             // Sent on TCP. The socket doesn't know which requests its bytes answer: by fd, the
-            // analysis takes the first send after a response's T5.
+            // analysis takes the first send after a response's T5. S0 is when that send started,
+            // logged only for sends that sent something: a stuck client's socket is retried every
+            // loop.
+            TRACE_AT(S0, fd_, send_start, logger_);
             TRACE(T6, fd_, logger_);
         }
     }

@@ -301,7 +301,7 @@ int main(int argc, char** argv) {
 
   // Sender: request i goes out at start + i / rate.
   std::vector<int64_t> sent_at(n);
-  std::vector<uint64_t> sent_tsc(n);
+  std::vector<uint64_t> sent_tsc(n), sent_end_tsc(n);
   const int64_t start = now() + 100'000'000;  // the other threads are running by then.
   auto due = [&](size_t i) { return start + static_cast<int64_t>(i * 1e9 / cfg.rate); };
   auto sender_thread = createAndStartThread(cfg.sender_core, "Benchmark/Sender", [&]() {
@@ -312,6 +312,7 @@ int main(int argc, char** argv) {
       sent_at[i] = now();  // the request goes into its TCP connection.
       sent_tsc[i] = Common::rdtsc();
       sendAll(fds[r.me_client_request_.client_id_], &r, sizeof(r));
+      sent_end_tsc[i] = Common::rdtsc();
     }
   });
   ASSERT(sender_thread != nullptr, "Failed to start the sender thread.");
@@ -365,10 +366,13 @@ int main(int argc, char** argv) {
   printf("\n");
 
   // This side's stages of every request for scripts/trace-analysis.py, like the exchange's TRACE
-  // lines: C0 sent, C7 final response, C7m the ADD / CANCEL update, LINK which update a request
-  // caused (from its ACCEPTED / CANCELED). C0 is in send order.
+  // lines: C0 sent, C1 its send() returned, C7 final response, C7m the ADD / CANCEL update, LINK
+  // which update a request caused (from its ACCEPTED / CANCELED). C0 is in send order.
   if (FILE* trace = fopen("benchmark_trace.log", "w")) {
-    for (size_t i = 0; i < n; ++i) fprintf(trace, "C0 %lu %lu\n", traceKey(requests.stream[i].me_client_request_), sent_tsc[i]);
+    for (size_t i = 0; i < n; ++i) {
+      const auto key = traceKey(requests.stream[i].me_client_request_);
+      fprintf(trace, "C0 %lu %lu\nC1 %lu %lu\n", key, sent_tsc[i], key, sent_end_tsc[i]);
+    }
     for (const auto& r : responses) {
       const bool cancel = r.type == ClientResponseType::CANCELED || r.type == ClientResponseType::CANCEL_REJECTED;
       const auto request = requestKey(r.client, r.client_order_id, cancel);

@@ -67,6 +67,13 @@ namespace Common{
         LOGGER.log(#TAG " % %\n", static_cast<uint64_t>(KEY), Common::rdtsc());                 \
     } while(false)
 
+// TRACE with a TSC read earlier: for a stage start that is only worth logging once it's known
+// how the stage ended (a syscall that did something).
+#define TRACE_AT(TAG, KEY, TSC, LOGGER)                                                         \
+    do {                                                                                        \
+        LOGGER.log(#TAG " % %\n", static_cast<uint64_t>(KEY), static_cast<uint64_t>(TSC));      \
+    } while(false)
+
 // Time-to-tick: log the current nanosecond timestamp at a hop on the order's path.
 // The difference between two hops' timestamps is the latency between them.
 #define TTT_MEASURE(TAG, LOGGER)                                                                \

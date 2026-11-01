@@ -1,4 +1,5 @@
 #include "tcp-server.h"
+#include "perf-utils.h"
 #include <algorithm>
 namespace Common{
 
@@ -63,6 +64,9 @@ namespace Common{
         disconnected_sockets_.clear();
         // number of ready to interact sockets.
         const int n = epoll_wait(efd_, events_, max_events, 0);
+        // epoll_wait returned with sockets to read: the analysis takes the last one before a
+        // read. Only these polls: idle, the loop polls millions of times a second.
+        if (n > 0) TRACE(P1, n, logger_);
         // iterate over each.
         bool has_new_connection{false};
         for (int i = 0; i < n; ++i) {

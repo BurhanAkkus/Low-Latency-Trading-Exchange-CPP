@@ -4,17 +4,27 @@
 The exchange logs a TRACE line (common/perf-utils.h) at every stage of a request's path,
 "<stage> <key> <tsc>", the benchmark writes its own stages to benchmark_trace.log:
     C0   <request key> <tsc>     the request goes into its TCP connection (send order)
+    C1   <request key> <tsc>     its send() returned
     C7   <request key> <tsc>     its final response arrives
     C7m  <update key> <tsc>      an ADD / CANCEL update arrives
     LINK <request key> <update key>  the update a request caused (from its ACCEPTED / CANCELED)
 Stages are joined by key. All times are TSC cycles, one clock for every core and process.
 
-    response:     C0 -> T1 -> T2 -> T3 -> T4 -> T5 -> T6 -> C7
+    response:     C0 -> P1 -> R0 -> R1 -> T1 -> T2 -> T3 -> T4 -> T5 -> S0 -> T6 -> C7
     market data:  T4 -> M5 -> M6 -> C7m
 
-T6 is logged per socket send, by fd (T6fd maps each client to its fd): a response's T6 is the first
-send on its client's socket at or after its T5. M6 is logged once per publisher iteration: an
-update's M6 is the next M6 after its M5 in the publisher's log.
+The order server's socket stages are logged per poll or per socket, not per request:
+    P1   epoll_wait returned with something: a request's P1 is the last one before its R0.
+    R0, R1  a read on a socket started and returned, by fd (T6fd maps each client to its fd): a
+         request's read is the last one on its client's socket at or before its T1.
+    S0, T6  a send on a socket started and returned, by fd: a response's send is the first one on
+         its client's socket at or after its T5.
+M6 is logged once per publisher iteration: an update's M6 is the next M6 after its M5 in the
+publisher's log.
+
+C1 isn't on the path: on loopback the kernel puts the request into the order server's socket
+inside the client's send(), so the order server can read it before that send() returns. C0 -> C1
+is printed on its own, it's part of C0 -> P1.
 
 The first --warmup-pct of requests (in send order) are left out, as in the benchmark's own report.
 Each path's table only has requests traced at every one of its stages, so the stage means add up to
@@ -40,14 +50,25 @@ _spec.loader.exec_module(perf)
 
 REQUEST_STAGES = ("T1", "T2", "T3", "T4", "T5")
 RESPONSE_PATH = [
-    ("C0", "T1", "TCP in, waiting for the order server to read the socket"),
+    ("C0", "P1", "client send(), until the order server's epoll_wait"),
+    ("P1", "R0", "reads of other sockets in the same poll"),
+    ("R0", "R1", "recvmsg"),
+    ("R1", "T1", "parse"),
     ("T1", "T2", "rest of the socket pass, sequencer, batch published"),
     ("T2", "T3", "waiting in the request queue"),
     ("T3", "T4", "matching engine"),
     ("T4", "T5", "waiting in the response queue"),
-    ("T5", "T6", "rest of the response drain, send() into TCP"),
+    ("T5", "S0", "rest of the response drain, other sockets' sends"),
+    ("S0", "T6", "send() into TCP"),
     ("T6", "C7", "TCP out, client read"),
 ]
+# The exchange's own work on a request: the response path without the syscalls (recvmsg, send())
+# and the client's side.
+SYSCALL_STAGES = {("C0", "P1"), ("R0", "R1"), ("S0", "T6"), ("T6", "C7")}
+NO_SYSCALL_PATH = [s for s in RESPONSE_PATH if s[:2] not in SYSCALL_STAGES]
+# Up to the publisher reading the update. M5 -> M6 has the publisher's UDP sends in it, it isn't split.
+NO_SYSCALL_MD_PATH = [s for s in NO_SYSCALL_PATH if s[1] in ("R0", "T1", "T2", "T3", "T4")] + [
+    ("T4", "M5", "waiting in the market update queue")]
 MARKET_DATA_PATH = [
     ("C0", "T4", "request in, up to the engine publishing (as above)"),
     ("T4", "M5", "waiting in the market update queue"),
@@ -57,8 +78,8 @@ MARKET_DATA_PATH = [
 
 
 def read_benchmark(path):
-    """Request keys in send order with their C0, and C7 / C7m / LINK by key."""
-    keys, c0, c7, c7m, link = [], [], {}, {}, {}
+    """Request keys in send order with their C0 and C1, and C7 / C7m / LINK by key."""
+    keys, c0, c1, c7, c7m, link = [], [], [], {}, {}, {}
     with open(path) as f:
         for line in f:
             tag, a, b = line.split()
@@ -66,59 +87,93 @@ def read_benchmark(path):
             if tag == "C0":
                 keys.append(a)
                 c0.append(b)
+            elif tag == "C1":
+                c1.append(b)
             elif tag == "C7":
                 c7.setdefault(a, b)
             elif tag == "C7m":
                 c7m.setdefault(a, b)
             elif tag == "LINK":
                 link[a] = b
-    return keys, c0, c7, c7m, link
+    return keys, c0, c1, c7, c7m, link
 
 
-def read_exchange(paths):
-    """Request stages by key, socket sends by fd, client fds, M5 / M6 by update key."""
-    stages = {s: {} for s in REQUEST_STAGES}
-    sends = defaultdict(list)  # fd -> send tscs, in time order: one logger writes them in order
-    client_fd = {}
-    m5, m6 = {}, {}
-    for path in paths:
-        pending = []  # M5 keys waiting for the next M6, only the publisher's log has either
-        with open(path, errors="replace") as f:
-            for line in f:
-                p = line.split()
-                if len(p) != 3:
-                    continue
-                tag = p[0]
-                try:
-                    a, b = int(p[1]), int(p[2])
-                except ValueError:
-                    continue
-                if tag in stages:
-                    stages[tag].setdefault(a, b)
-                elif tag == "T6":
-                    sends[a].append(b)
-                elif tag == "T6fd":
-                    client_fd[a >> 32] = a & 0xFFFFFFFF
-                elif tag == "M5":
-                    m5.setdefault(a, b)
-                    pending.append(a)
-                elif tag == "M6":
-                    for k in pending:
-                        m6.setdefault(k, b)
-                    pending.clear()
-    return stages, sends, client_fd, m5, m6
+class Exchange:
+    """The exchange's stages: by request key, by fd, by poll and by update key."""
+
+    def __init__(self, paths):
+        self.stages = {s: {} for s in REQUEST_STAGES}
+        # fd -> starts and ends of reads / sends, in time order: one logger writes them in order.
+        self.reads = defaultdict(lambda: ([], []))
+        self.sends = defaultdict(lambda: ([], []))
+        self.polls = []
+        self.client_fd = {}
+        self.m5, self.m6 = {}, {}
+        for path in paths:
+            pending = []  # M5 keys waiting for the next M6, only the publisher's log has either
+            with open(path, errors="replace") as f:
+                for line in f:
+                    p = line.split()
+                    if len(p) != 3:
+                        continue
+                    tag = p[0]
+                    try:
+                        a, b = int(p[1]), int(p[2])
+                    except ValueError:
+                        continue
+                    if tag in self.stages:
+                        self.stages[tag].setdefault(a, b)
+                    elif tag in ("R0", "R1"):
+                        self.reads[a][tag == "R1"].append(b)
+                    elif tag in ("S0", "T6"):
+                        self.sends[a][tag == "T6"].append(b)
+                    elif tag == "P1":
+                        self.polls.append(b)
+                    elif tag == "T6fd":
+                        self.client_fd[a >> 32] = a & 0xFFFFFFFF
+                    elif tag == "M5":
+                        self.m5.setdefault(a, b)
+                        pending.append(a)
+                    elif tag == "M6":
+                        for k in pending:
+                            self.m6.setdefault(k, b)
+                        pending.clear()
+
+    def socket_stages(self, t, client):
+        """P1, R0, R1 of the read that brought the request in, S0, T6 of the send that took its
+        response out. Leaves out what it can't find."""
+        fd = self.client_fd.get(client)
+        if fd is None:
+            return
+        if t.get("T1") is not None:
+            starts, ends = self.reads.get(fd, ([], []))
+            j = bisect.bisect_right(ends, t["T1"]) - 1
+            if j >= 0:
+                t["R0"], t["R1"] = starts[j], ends[j]
+                k = bisect.bisect_right(self.polls, t["R0"]) - 1
+                if k >= 0:
+                    t["P1"] = self.polls[k]
+        if t.get("T5") is not None:
+            starts, ends = self.sends.get(fd, ([], []))
+            j = bisect.bisect_left(ends, t["T5"])
+            if j < len(ends):
+                t["S0"], t["T6"] = starts[j], ends[j]
 
 
 class Path:
-    """A path's stage durations, in cycles: one list per stage, the total last."""
+    """A path's stage durations, in cycles: one list per stage, the total last. total None: the
+    total is the sum of the stages, for stages that don't follow each other."""
 
-    def __init__(self, title, stages, total):
-        self.title, self.stages = title, stages + [(total[0], total[1], "total")]
+    def __init__(self, title, stages, total, total_label="total"):
+        self.title, self.total = title, total
+        self.stages = stages + [(total[0], total[1], total_label) if total else ("", "", total_label)]
         self.cycles = [[] for _ in self.stages]
 
     def add(self, t):
-        for (a, b, _), v in zip(self.stages, self.cycles):
-            v.append(t[b] - t[a])
+        durations = [t[b] - t[a] for a, b, _ in self.stages[:-1]]
+        durations.append(t[self.total[1]] - t[self.total[0]] if self.total else sum(durations))
+        for v, d in zip(self.cycles, durations):
+            v.append(d)
 
     def print(self, tsc_ghz):
         """One row per stage and the total, in us: mean, share of the total's mean, percentiles."""
@@ -132,7 +187,7 @@ class Path:
             v = sorted(c / us for c in cycles)
             mean = sum(v) / len(v)
             cells = " ".join(f"{perf.percentile(v, p):8.2f}" for p in perf.PERCENTILES)
-            print(f"{a + ' -> ' + b:<11} {what:<52} {mean:8.2f} {mean / total_mean:6.1%} {cells} {v[-1]:8.2f}")
+            print(f"{a + ' -> ' + b if a else '':<11} {what:<52} {mean:8.2f} {mean / total_mean:6.1%} {cells} {v[-1]:8.2f}")
 
 
 def main():
@@ -150,35 +205,45 @@ def main():
     if not tsc_ghz:
         sys.exit("could not detect TSC frequency, pass --tsc-ghz")
 
-    keys, c0, c7, c7m, link = read_benchmark(bench)
-    stages, sends, client_fd, m5, m6 = read_exchange(logs)
+    keys, c0, c1, c7, c7m, link = read_benchmark(bench)
+    exchange = Exchange(logs)
     warmup = int(len(keys) * args.warmup_pct / 100)
 
     response = Path("request -> final response", RESPONSE_PATH, ("C0", "C7"))
     market_data = Path("request -> ADD / CANCEL update", MARKET_DATA_PATH, ("C0", "C7m"))
+    client_send = Path("the client's send() on its own, part of C0 -> P1", [], ("C0", "C1"), "send()")
+    no_syscalls = Path("request -> final response without syscalls and the client's side", NO_SYSCALL_PATH, None,
+                       "sum: the order server and the engine")
+    no_syscalls_md = Path("request -> publisher reads its update, without syscalls", NO_SYSCALL_MD_PATH, None,
+                          "sum: the order server, the engine, the queue")
+    path_stages = {s for a, b, _ in RESPONSE_PATH for s in (a, b)}
     incomplete = 0
     for i in range(warmup, len(keys)):
         key = keys[i]
         t = {"C0": c0[i], "C7": c7.get(key)}
         for s in REQUEST_STAGES:
-            t[s] = stages[s].get(key)
-        fd = client_fd.get(key >> 32)
-        if t["T5"] is not None and fd is not None:
-            fd_sends = sends.get(fd, [])
-            j = bisect.bisect_left(fd_sends, t["T5"])
-            t["T6"] = fd_sends[j] if j < len(fd_sends) else None
-        if any(v is None for v in t.values()):
+            t[s] = exchange.stages[s].get(key)
+        exchange.socket_stages(t, key >> 32)
+        if any(t.get(s) is None for s in path_stages):
             incomplete += 1
             continue
         response.add(t)
+        no_syscalls.add(t)
+        if i < len(c1):
+            client_send.add({"C0": c0[i], "C1": c1[i]})
         update = link.get(key)
-        if update is not None and update in m5 and update in m6 and update in c7m:
-            market_data.add({"C0": t["C0"], "T4": t["T4"], "M5": m5[update], "M6": m6[update], "C7m": c7m[update]})
+        if update is not None and update in exchange.m5 and update in exchange.m6 and update in c7m:
+            market_data.add({"C0": t["C0"], "T4": t["T4"], "M5": exchange.m5[update],
+                             "M6": exchange.m6[update], "C7m": c7m[update]})
+            no_syscalls_md.add({**t, "M5": exchange.m5[update]})
 
     print(f"TSC: {tsc_ghz:.4f} GHz, {len(keys)} requests, first {warmup} left out as warm-up, "
           f"{incomplete} of the rest not traced at every stage")
     response.print(tsc_ghz)
+    client_send.print(tsc_ghz)
     market_data.print(tsc_ghz)
+    no_syscalls.print(tsc_ghz)
+    no_syscalls_md.print(tsc_ghz)
 
 
 if __name__ == "__main__":
