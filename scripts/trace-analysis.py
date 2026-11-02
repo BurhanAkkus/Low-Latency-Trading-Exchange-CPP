@@ -14,9 +14,12 @@ Stages are joined by key. All times are TSC cycles, one clock for every core and
     market data:  T4 -> M5 -> M6 -> C7m
 
 The order server's socket stages are logged per poll or per socket, not per request:
-    P1   epoll_wait returned with something: a request's P1 is the last one before its R0.
+    P1   epoll_wait returned with something (shared memory: a pass over the clients' rings that read
+         something started): a request's P1 is the last one before its R0, or before its T1
+         without R0/R1 lines.
     R0, R1  a read on a socket started and returned, by fd (T6fd maps each client to its fd): a
-         request's read is the last one on its client's socket at or before its T1.
+         request's read is the last one on its client's socket at or before its T1. Not logged by
+         the shared memory order server, its path goes P1 -> T1.
     S0, T6  a send on a socket started and returned, by fd: a response's send is the first one on
          its client's socket at or after its T5.
 M6 is logged once per publisher iteration: an update's M6 is the next M6 after its M5 in the
@@ -62,13 +65,22 @@ RESPONSE_PATH = [
     ("S0", "T6", "send() into TCP"),
     ("T6", "C7", "TCP out, client read"),
 ]
+# Without R0/R1 lines (the shared memory order server): P1 straight to T1.
+RESPONSE_PATH_NO_READS = [RESPONSE_PATH[0], ("P1", "T1", "the clients' rings up to this one, parse")] + RESPONSE_PATH[4:]
 # The exchange's own work on a request: the response path without the syscalls (recvmsg, send())
 # and the client's side.
 SYSCALL_STAGES = {("C0", "P1"), ("R0", "R1"), ("S0", "T6"), ("T6", "C7")}
-NO_SYSCALL_PATH = [s for s in RESPONSE_PATH if s[:2] not in SYSCALL_STAGES]
-# Up to the publisher reading the update. M5 -> M6 has the publisher's UDP sends in it, it isn't split.
-NO_SYSCALL_MD_PATH = [s for s in NO_SYSCALL_PATH if s[1] in ("R0", "T1", "T2", "T3", "T4")] + [
-    ("T4", "M5", "waiting in the market update queue")]
+
+
+def no_syscall_paths(response_path):
+    """The response path without the syscalls, and the market data path up to the publisher
+    reading the update (M5 -> M6 has the publisher's UDP sends in it, it isn't split)."""
+    no_syscalls = [s for s in response_path if s[:2] not in SYSCALL_STAGES]
+    md = [s for s in no_syscalls if s[1] in ("R0", "T1", "T2", "T3", "T4")] + [
+        ("T4", "M5", "waiting in the market update queue")]
+    return no_syscalls, md
+
+
 MARKET_DATA_PATH = [
     ("C0", "T4", "request in, up to the engine publishing (as above)"),
     ("T4", "M5", "waiting in the market update queue"),
@@ -153,9 +165,10 @@ class Exchange:
             j = bisect.bisect_right(ends, t["T1"]) - 1
             if j >= 0:
                 t["R0"], t["R1"] = starts[j], ends[j]
-                k = bisect.bisect_right(self.polls, t["R0"]) - 1
-                if k >= 0:
-                    t["P1"] = self.polls[k]
+            # The poll before the read, or before T1 when there are no reads (R0/R1 not logged).
+            k = bisect.bisect_right(self.polls, t.get("R0", t["T1"])) - 1
+            if k >= 0:
+                t["P1"] = self.polls[k]
         if t.get("T5") is not None:
             starts, ends = self.sends.get(fd, ([], []))
             j = bisect.bisect_left(ends, t["T5"])
@@ -235,14 +248,17 @@ def main():
     exchange = Exchange(logs)
     warmup = int(len(keys) * args.warmup_pct / 100)
 
-    response = Path("request -> final response", RESPONSE_PATH, ("C0", "C7"))
+    # The TCP order server logs R0/R1 around its recvmsg, the shared memory one doesn't.
+    response_path = RESPONSE_PATH if exchange.reads else RESPONSE_PATH_NO_READS
+    no_syscall_path, no_syscall_md_path = no_syscall_paths(response_path)
+    response = Path("request -> final response", response_path, ("C0", "C7"))
     market_data = Path("request -> ADD / CANCEL update", MARKET_DATA_PATH, ("C0", "C7m"))
     client_send = Path("the client's send() on its own, part of C0 -> P1", [], ("C0", "C1"), "send()")
-    no_syscalls = Path("request -> final response without syscalls and the client's side", NO_SYSCALL_PATH, None,
+    no_syscalls = Path("request -> final response without syscalls and the client's side", no_syscall_path, None,
                        "sum: the order server and the engine")
-    no_syscalls_md = Path("request -> publisher reads its update, without syscalls", NO_SYSCALL_MD_PATH, None,
+    no_syscalls_md = Path("request -> publisher reads its update, without syscalls", no_syscall_md_path, None,
                           "sum: the order server, the engine, the queue")
-    path_stages = {s for a, b, _ in RESPONSE_PATH for s in (a, b)}
+    path_stages = {s for a, b, _ in response_path for s in (a, b)}
     engine_rows = []
     incomplete = 0
     for i in range(warmup, len(keys)):

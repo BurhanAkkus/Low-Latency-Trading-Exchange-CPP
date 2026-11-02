@@ -15,16 +15,10 @@ namespace Exchange{
     }
 
     auto ShmSocket::receive() noexcept -> bool {
-        // Nothing new costs a load of the ring's counter. The read's start time only for a ring
-        // that has something: a TSC read for each of 255 clients on every pass is a microsecond.
-        if (!channel_->requests_.readable()) return false;
-        const auto recv_start = Common::rdtsc();
+        // Nothing new costs a load of the ring's counter. No R0/R1 around the read as for TCP's
+        // recvmsg: a ring read is a memcpy of a few dozen bytes.
         const auto n = channel_->requests_.read(rcv_buffer_ + next_rcv_valid_index_, RECEIVE_BUFFER_SIZE - next_rcv_valid_index_);
         if (!n) return false;
-        // The read from the ring started and returned. By fd, like T6: the analysis takes the last
-        // read before a request's T1.
-        TRACE_AT(R0, fd_, recv_start, logger_);
-        TRACE(R1, fd_, logger_);
         next_rcv_valid_index_ += n;
         // Each request carries its own send time, there is no receive time.
         recv_callback_(this, 0);

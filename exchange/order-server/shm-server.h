@@ -13,7 +13,7 @@ namespace Exchange{
     // of its requests ring into rcv_buffer_, its responses go into send_buffer_ and flush() moves
     // them into its responses ring.
     struct ShmSocket{
-        // The client's slot: the trace key in place of a socket's fd (T6fd, R0/R1, S0/T6).
+        // The client's slot: the trace key in place of a socket's fd (T6fd, S0/T6).
         int fd_ = -1;
         OrderChannels::Client* channel_ = nullptr;
         // Whole requests only, so nothing is left over between reads.
@@ -27,6 +27,10 @@ namespace Exchange{
         // Zeroed with the socket: its pages are in before the client's first request.
         // ToDo - performance
         // ring buffer instead of moving.
+        // ToDo - performance
+        // fields every pass reads first, buffers last: next_rcv_valid_index_ after the 64 KB
+        // rcv_buffer_ puts it on another page, a pass over 255 clients touches 255 more pages.
+        // Moved up, the response path was ~0.3 us faster (2.64-2.82 vs 3.03-3.07 us mean).
         char rcv_buffer_[RECEIVE_BUFFER_SIZE]{};
         size_t next_rcv_valid_index_ = 0;
         char send_buffer_[SEND_BUFFER_SIZE]{};

@@ -1,15 +1,18 @@
 // End-to-end exchange benchmark: clients trade with a running exchange binary the way customers do.
-// Every client is a TCP connection to the order server. One thread sends an open-loop request
-// stream at a fixed rate: request i is due at start + i / rate, whether or not earlier ones were
-// answered. One thread reads every response, one reads the incremental market data on lo.
-// Latency starts when a request goes into its TCP connection and ends at its final response, or at
+// Every client is a slot in the order server's shared memory (order-channels.h), in place of a TCP
+// connection (the TCP version is on main). One thread sends an open-loop request stream at a fixed
+// rate: request i is due at start + i / rate, whether or not earlier ones were answered. One
+// thread reads every response, one reads the incremental market data on lo.
+// Latency starts when a request goes into its client's ring and ends at its final response, or at
 // the market update it caused. A sender that falls behind the schedule is reported as schedule lag.
 #include "common/mcast-socket.h"
+#include "common/shared-region.h"
 #include "common/thread-utils.h"
 #include "exchange/market-data/market-update.h"
 #include "exchange/order-server/client-request.h"
 #include "exchange/order-server/client-response.h"
-#include <sys/epoll.h>
+#include "exchange/order-server/order-channels.h"
+// #include <sys/epoll.h>
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -141,28 +144,34 @@ namespace {
     return r;
   }
 
-  auto connectClient() -> int {
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(ORDER_SERVER_PORT);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    // The exchange may still be starting up.
-    for (int attempt = 0; connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)); ++attempt) {
-      if (attempt == 600) FATAL("Can't connect to the order server on port " + std::to_string(ORDER_SERVER_PORT) + ".");
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    ASSERT(setNoDelay(fd) && setNonBlocking(fd), "Failed to set up a client socket.");
-    return fd;
-  }
+  // auto connectClient() -> int {
+  //   const int fd = socket(AF_INET, SOCK_STREAM, 0);
+  //   sockaddr_in addr{};
+  //   addr.sin_family = AF_INET;
+  //   addr.sin_port = htons(ORDER_SERVER_PORT);
+  //   addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  //   // The exchange may still be starting up.
+  //   for (int attempt = 0; connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)); ++attempt) {
+  //     if (attempt == 600) FATAL("Can't connect to the order server on port " + std::to_string(ORDER_SERVER_PORT) + ".");
+  //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  //   }
+  //   ASSERT(setNoDelay(fd) && setNonBlocking(fd), "Failed to set up a client socket.");
+  //   return fd;
+  // }
 
-  // Non-blocking: a full socket buffer means the order server reads slower than we send, keep trying.
-  auto sendAll(int fd, const void* data, size_t len) noexcept {
-    for (size_t off = 0; off < len;) {
-      const auto n = ::send(fd, static_cast<const char*>(data) + off, len - off, MSG_NOSIGNAL);
-      if (n > 0) off += n;
-      else if (!wouldBlock()) FATAL("send() to the order server failed: " + std::string(strerror(errno)));
-    }
+  // // Non-blocking: a full socket buffer means the order server reads slower than we send, keep trying.
+  // auto sendAll(int fd, const void* data, size_t len) noexcept {
+  //   for (size_t off = 0; off < len;) {
+  //     const auto n = ::send(fd, static_cast<const char*>(data) + off, len - off, MSG_NOSIGNAL);
+  //     if (n > 0) off += n;
+  //     else if (!wouldBlock()) FATAL("send() to the order server failed: " + std::string(strerror(errno)));
+  //   }
+  // }
+
+  // A full ring means the order server reads slower than we send, keep trying.
+  template <typename Ring>
+  auto writeAll(Ring& ring, const void* data, size_t len) noexcept {
+    for (size_t off = 0; off < len;) off += ring.write(static_cast<const char*>(data) + off, len - off);
   }
 
   // A final response to a request: NEW gets ACCEPTED or REJECTED, CANCEL gets CANCELED or CANCEL_REJECTED.
@@ -227,8 +236,16 @@ int main(int argc, char** argv) {
   const size_t n = requests.stream.size();
 
   // Connections, one per client id.
-  std::vector<int> fds(cfg.clients + 1, -1);
-  for (size_t c = 1; c <= cfg.clients; ++c) fds[c] = connectClient();
+  // std::vector<int> fds(cfg.clients + 1, -1);
+  // for (size_t c = 1; c <= cfg.clients; ++c) fds[c] = connectClient();
+  // A slot each in the order server's shared memory, once the exchange has created it.
+  SharedRegion<OrderChannels> orders(ORDER_CHANNELS_NAME, SharedRegion<OrderChannels>::Open::ATTACH);
+  auto& slots = orders->clients_;
+  for (size_t c = 1; c <= cfg.clients; ++c) {
+    auto expected = ClientState::FREE;
+    ASSERT(slots[c].state_.compare_exchange_strong(expected, ClientState::CONNECTED), "Client slot " + std::to_string(c) + " isn't free.");
+    orders->changes_.fetch_add(1, std::memory_order_release);
+  }
 
   // Not exchange*.log: perf-analysis.py reads those for the engine's measurements.
   Logger logger("benchmark_client.log");
@@ -265,33 +282,20 @@ int main(int argc, char** argv) {
   std::atomic<size_t> finals{0};
   size_t fills = 0, tcp_gaps = 0;
   auto receiver_thread = createAndStartThread(cfg.receiver_core, "Benchmark/Receiver", [&]() {
-    const int efd = epoll_create1(0);
-    for (size_t c = 1; c <= cfg.clients; ++c) {
-      epoll_event ev{};
-      ev.events = EPOLLIN;
-      ev.data.u32 = static_cast<uint32_t>(c);
-      ASSERT(epoll_ctl(efd, EPOLL_CTL_ADD, fds[c], &ev) == 0, "epoll_ctl() failed.");
-    }
-    // Per client: bytes of a response split across two reads. Zeroed, so its pages are in before the
-    // run (see preallocate).
-    struct Buffer { char data[64 * 1024]{}; size_t size = 0; };
-    std::vector<Buffer> buffers(cfg.clients + 1);
+    // epoll_wait and recv per TCP connection in the TCP version (on main). Here every client's
+    // responses ring is read on every pass, a ring with nothing new costs a load of its counter.
+    // Reads return whole responses only, so nothing is left over between reads. Zeroed, so its
+    // pages are in before the run (see preallocate).
+    std::vector<OMClientResponse> got(1024);
     std::vector<size_t> next_seq(cfg.clients + 1, 1);
-    epoll_event events[ME_MAX_NUM_CLIENTS];
     while (run) {
-      const int ready = epoll_wait(efd, events, ME_MAX_NUM_CLIENTS, 0);
-      for (int e = 0; e < ready; ++e) {
-        const auto c = events[e].data.u32;
-        auto& b = buffers[c];
-        const auto got = ::recv(fds[c], b.data + b.size, sizeof(b.data) - b.size, 0);
-        if (got <= 0) continue;
+      for (size_t c = 1; c <= cfg.clients; ++c) {
+        const auto bytes = slots[c].responses_.read(got.data(), got.size() * sizeof(OMClientResponse));
+        if (!bytes) continue;
         const auto time = now();
         const auto tsc = Common::rdtsc();
-        b.size += got;
-        size_t off = 0;
-        for (; off + sizeof(OMClientResponse) <= b.size; off += sizeof(OMClientResponse)) {
-          OMClientResponse r;
-          memcpy(&r, b.data + off, sizeof(r));
+        for (size_t k = 0; k < bytes / sizeof(OMClientResponse); ++k) {
+          const auto& r = got[k];
           tcp_gaps += r.seq_num_ != next_seq[c];
           next_seq[c] = r.seq_num_ + 1;
           const auto& m = r.me_client_response_;
@@ -301,11 +305,8 @@ int main(int argc, char** argv) {
                                static_cast<uint8_t>(c), static_cast<uint8_t>(m.ticker_id_), m.type_});
           finals.fetch_add(1, std::memory_order_relaxed);
         }
-        memmove(b.data, b.data + off, b.size - off);
-        b.size -= off;
       }
     }
-    close(efd);
   });
   ASSERT(receiver_thread != nullptr, "Failed to start the receiver thread.");
 
@@ -318,10 +319,14 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < n; ++i) {
       const auto at = due(i);
       while (now() < at) __builtin_ia32_pause();
-      const auto& r = requests.stream[i];
-      sent_at[i] = now();  // the request goes into its TCP connection.
+      // const auto& r = requests.stream[i];
+      auto r = requests.stream[i];
+      sent_at[i] = now();  // the request goes into its client's ring.
       sent_tsc[i] = Common::rdtsc();
-      sendAll(fds[r.me_client_request_.client_id_], &r, sizeof(r));
+      // Its send time goes with it: the order server sequences by it.
+      r.send_tsc_ = sent_tsc[i];
+      // sendAll(fds[r.me_client_request_.client_id_], &r, sizeof(r));
+      writeAll(slots[r.me_client_request_.client_id_].requests_, &r, sizeof(r));
       sent_end_tsc[i] = Common::rdtsc();
     }
   });
@@ -393,6 +398,10 @@ int main(int argc, char** argv) {
     for (const auto& u : updates) fprintf(trace, "C7m %lu %lu\n", updateKey(u.ticker_id, u.order_id, u.type == MarketUpdateType::CANCEL), u.tsc);
     fclose(trace);
   }
-  for (size_t c = 1; c <= cfg.clients; ++c) close(fds[c]);
+  // for (size_t c = 1; c <= cfg.clients; ++c) close(fds[c]);
+  for (size_t c = 1; c <= cfg.clients; ++c) {
+    slots[c].state_.store(ClientState::CLOSED, std::memory_order_release);
+    orders->changes_.fetch_add(1, std::memory_order_release);
+  }
   return responses.size() == n && !tcp_gaps ? EXIT_SUCCESS : EXIT_FAILURE;
 }

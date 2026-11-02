@@ -40,14 +40,6 @@ namespace Common{
             return len;
         };
 
-        // How many bytes of whole objects can be read now, without reading them.
-        auto readable() noexcept -> size_t{
-            auto read{next_to_read_.load(std::memory_order_relaxed)};
-            if(cached_write_ - read < Unit){cached_write_ = next_to_write_.load(std::memory_order_acquire);}
-            const auto available{cached_write_ - read};
-            return available - available % Unit;
-        }
-
         // read whatever can be read. return how much is read,
         auto read(void* dest, size_t max) noexcept -> size_t{
             auto read{next_to_read_.load(std::memory_order_relaxed)};
