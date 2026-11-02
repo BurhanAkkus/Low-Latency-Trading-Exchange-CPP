@@ -136,7 +136,7 @@ namespace {
         r.cancel_index[c].push_back(NONE);
       }
       ++requests_of[c];
-      r.stream.push_back({requests_of[c], request});  // seq numbers start at 1.
+      r.stream.push_back({requests_of[c], 0, request});  // seq numbers start at 1. send_tsc_ is 0 here.
     }
     return r;
   }

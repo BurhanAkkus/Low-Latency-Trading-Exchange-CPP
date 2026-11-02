@@ -53,12 +53,15 @@ namespace Exchange{
     };
     struct OMClientRequest {
         size_t seq_num_ = 0;
+        // The client's TSC just before it writes the request: the order server sequences by it.
+        uint64_t send_tsc_ = 0;
         MEClientRequest me_client_request_;
         auto toString() const {
         std::stringstream ss;
         ss << "OMClientRequest"
             << " ["
             << "seq:" << seq_num_
+            << " send_tsc:" << send_tsc_
             << " " << me_client_request_.toString()
             << "]";
         return ss.str();

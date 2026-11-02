@@ -6,7 +6,7 @@
 #include <cstring>
 #include <algorithm>
 namespace Common{
-    template<size_t N>
+    template<size_t N, size_t Unit = 1>
     class SharedMemory final{
         static_assert(std::has_single_bit(N), "SharedMemory capacity must be a power of two.");
         static constexpr size_t MASK = N - 1;
@@ -45,6 +45,7 @@ namespace Common{
             auto read{next_to_read_.load(std::memory_order_relaxed)};
             if(max > cached_write_ - read){cached_write_ = next_to_write_.load(std::memory_order_acquire);}
             max = std::min(max,cached_write_ - read);
+            max -= max % Unit;
             if(max == 0){return max;}
             // read until the end.
             memcpy(static_cast<char*>(dest), memory_.data() + (read & MASK), std::min(max, N - (read & MASK)));
