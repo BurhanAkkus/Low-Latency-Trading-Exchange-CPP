@@ -23,6 +23,9 @@ namespace Exchange{
         CLOSED = 2
     };
 
+    // ToDo - performance
+    // the indices for sharedMemory carried into the front for ease of scanning.
+    // sharedMemory's buffers left inside.
     struct OrderChannels{
         // Counts every CONNECTED and CLOSED a client sets: the order server rescans the slots'
         // states only when it changed.
