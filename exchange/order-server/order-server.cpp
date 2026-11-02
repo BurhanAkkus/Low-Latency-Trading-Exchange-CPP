@@ -5,8 +5,7 @@ using namespace Common;
 
 namespace Exchange{
     OrderServer::OrderServer(ClientRequestLFQueue* client_requests,
-            ClientResponseLFQueue* client_responses, const std::string &iface,
-            int port):iface_{iface},port_{port},
+            ClientResponseLFQueue* client_responses):
                 client_requests_{client_requests}, client_responses_{client_responses},
                 logger_("exchange_order_server.log"),
                 server_{logger_, [this](auto socket, auto rx_time) { recvCallback(socket, rx_time); },

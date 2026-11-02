@@ -82,10 +82,12 @@ int main(int argc, char **argv) {
         snap_pub_ip, snap_pub_port);
     market_data_publisher->start(cores.mdp, cores.snapshot);
     // order gateway.
-    const std::string order_gw_iface = "lo";
-    const int order_gw_port = 12345;
+    // Clients connect through shared memory (order-channels.h), not to lo:12345.
+    // const std::string order_gw_iface = "lo";
+    // const int order_gw_port = 12345;
     logger->log("%:% %() % Starting Order Server...\n", __FILE__, __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str));
-    order_server = new Exchange::OrderServer(&client_requests, &client_responses, order_gw_iface, order_gw_port);
+    // order_server = new Exchange::OrderServer(&client_requests, &client_responses, order_gw_iface, order_gw_port);
+    order_server = new Exchange::OrderServer(&client_requests, &client_responses);
     order_server->start(cores.order_server);
     // Heartbeat
     // usleep returns early when SIGINT or SIGTERM arrives, so shutdown is not delayed by the sleep.

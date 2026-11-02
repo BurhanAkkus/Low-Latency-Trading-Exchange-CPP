@@ -297,7 +297,7 @@ int main(int argc, char** argv) {
   std::vector<Response> responses;
   preallocate(responses, n);
   std::atomic<size_t> finals{0};
-  size_t fills = 0, tcp_gaps = 0;
+  size_t fills = 0, seq_gaps = 0;
   auto receiver_thread = createAndStartThread(cfg.receiver_core, "Benchmark/Receiver", [&]() {
     // epoll_wait and recv per TCP connection in the TCP version (on main). Here every client's
     // responses ring is read on every pass, a ring with nothing new costs a load of its counter.
@@ -313,7 +313,7 @@ int main(int argc, char** argv) {
         const auto tsc = Common::rdtsc();
         for (size_t k = 0; k < bytes / sizeof(OMClientResponse); ++k) {
           const auto& r = got[k];
-          tcp_gaps += r.seq_num_ != next_seq[c];
+          seq_gaps += r.seq_num_ != next_seq[c];
           next_seq[c] = r.seq_num_ + 1;
           const auto& m = r.me_client_response_;
           if (m.type_ == ClientResponseType::FILLED) { ++fills; continue; }
@@ -382,8 +382,8 @@ int main(int argc, char** argv) {
 
   const double send_secs = (sent_at[n - 1] - sent_at[0]) / 1e9, run_secs = (last_final - sent_at[0]) / 1e9;
   printf("sent %zu requests in %.2f s (%.0f/s)\n", n, send_secs, n / send_secs);
-  printf("answered %zu of %zu, %zu fills, tcp seq gaps %zu; market data: %zu updates, %zu lost\n",
-         responses.size(), n, fills, tcp_gaps, md_updates, md_lost);
+  printf("answered %zu of %zu, %zu fills, seq gaps %zu; market data: %zu updates, %zu lost\n",
+         responses.size(), n, fills, seq_gaps, md_updates, md_lost);
   printf("exchange throughput: %.0f requests/s, %.0f market updates/s\n", responses.size() / run_secs, md_updates / run_secs);
   const auto response_p = percentiles(response_latency), md_p = percentiles(md_latency), lag_p = percentiles(lag);
   printf("%-34s %9s %9s %9s %9s %9s\n", "latency (us), after warm-up", "p50", "p90", "p99", "p99.9", "max");
@@ -391,7 +391,7 @@ int main(int argc, char** argv) {
   printPercentiles("request -> ADD / CANCEL update", md_p, md_latency.size());
   printPercentiles("schedule lag (sender behind)", lag_p, lag.size());
   // For run-exchange-benchmark.sh: rates and counts, then p50 p90 p99 p99.9 max of each latency.
-  printf("csv:%.0f,%zu,%zu,%zu,%.0f,%.0f", n / send_secs, responses.size(), tcp_gaps, md_lost,
+  printf("csv:%.0f,%zu,%zu,%zu,%.0f,%.0f", n / send_secs, responses.size(), seq_gaps, md_lost,
          responses.size() / run_secs, md_updates / run_secs);
   for (const auto& p : {response_p, md_p, lag_p})
     for (const auto x : p) printf(",%.1f", x);
@@ -420,5 +420,5 @@ int main(int argc, char** argv) {
     slots[c].state_.store(ClientState::CLOSED, std::memory_order_release);
     orders->changes_.fetch_add(1, std::memory_order_release);
   }
-  return responses.size() == n && !tcp_gaps ? EXIT_SUCCESS : EXIT_FAILURE;
+  return responses.size() == n && !seq_gaps ? EXIT_SUCCESS : EXIT_FAILURE;
 }

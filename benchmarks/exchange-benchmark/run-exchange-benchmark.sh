@@ -11,7 +11,7 @@
 #
 # results.csv gets one row per run: the commit, whether the code had uncommitted changes (dirty) and
 # a fingerprint of them (runs with the same fingerprint ran the same code), the benchmark options,
-# the send rate, answered requests, tcp seq gaps, lost market updates, the exchange's requests/s
+# the send rate, answered requests, seq gaps (the tcp_gaps column), lost market updates, the exchange's requests/s
 # and market updates/s, and p50 p90 p99 p99.9 max in us of request -> final response, of
 # request -> ADD / CANCEL update and of the sender's schedule lag. Latencies leave out the first
 # 10% of requests. After the row, scripts/trace-analysis.py prints each stage of a request's path

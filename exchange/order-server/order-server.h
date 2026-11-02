@@ -14,9 +14,11 @@ using namespace Common;
 namespace Exchange{
     class OrderServer{
         public:
-        OrderServer(ClientRequestLFQueue *client_requests,
-            ClientResponseLFQueue *client_responses, const std::string &iface,
-            int port);
+        // Shared memory: no address to listen on.
+        // OrderServer(ClientRequestLFQueue *client_requests,
+        //     ClientResponseLFQueue *client_responses, const std::string &iface,
+        //     int port);
+        OrderServer(ClientRequestLFQueue *client_requests, ClientResponseLFQueue *client_responses);
         ~OrderServer();
         // core_id -1 leaves the thread unpinned.
         auto start(int core_id = -1) noexcept -> void;
@@ -24,8 +26,8 @@ namespace Exchange{
         private:
         std::atomic<bool> run_;
         std::thread* thread_ = nullptr;
-        const std::string iface_;
-        const int port_ = 0;;
+        // const std::string iface_;
+        // const int port_ = 0;;
         ClientRequestLFQueue* client_requests_{nullptr};
         ClientResponseLFQueue* client_responses_{nullptr};
         std::string time_str_;
