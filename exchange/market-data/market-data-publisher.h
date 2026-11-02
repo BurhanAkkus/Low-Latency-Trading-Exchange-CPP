@@ -3,11 +3,14 @@
 #include <exchange/market-data/market-update.h>
 #include <common/logging.h>
 #include "exchange/market-data/snapshot-synthesizer.h"
+#include "exchange/market-data/shm-market-data-socket.h"
 
 namespace Exchange {
     class MarketDataPublisher {
         public:
-        MarketDataPublisher(MEMarketUpdateLFQueue *market_updates, const std::string &iface, const std::string &snapshot_ip, int snapshot_port, const std::string &incremental_ip, int incremental_port);
+        // The incremental stream is in shared memory, only the snapshots need an address.
+        // MarketDataPublisher(MEMarketUpdateLFQueue *market_updates, const std::string &iface, const std::string &snapshot_ip, int snapshot_port, const std::string &incremental_ip, int incremental_port);
+        MarketDataPublisher(MEMarketUpdateLFQueue *market_updates, const std::string &iface, const std::string &snapshot_ip, int snapshot_port);
         // core ids -1 leave the threads unpinned.
         auto start(int core_id = -1, int snapshot_core_id = -1) noexcept -> void {
             run_ = true;
@@ -35,7 +38,10 @@ namespace Exchange {
         std::atomic<bool> run_{false};
         std::string time_str_;
         Logger logger_;
-        Common::McastSocket incremental_socket_;
+        // Shared memory in place of the multicast socket (the multicast version is on main). The
+        // snapshots stay on multicast.
+        // Common::McastSocket incremental_socket_;
+        ShmMarketDataSocket incremental_socket_;
         SnapshotSynthesizer *snapshot_synthesizer_ = nullptr;
         auto run() noexcept -> void;
     };

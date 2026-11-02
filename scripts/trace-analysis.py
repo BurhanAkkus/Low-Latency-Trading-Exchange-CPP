@@ -3,8 +3,8 @@
 
 The exchange logs a TRACE line (common/perf-utils.h) at every stage of a request's path,
 "<stage> <key> <tsc>", the benchmark writes its own stages to benchmark_trace.log:
-    C0   <request key> <tsc>     the request goes into its TCP connection (send order)
-    C1   <request key> <tsc>     its send() returned
+    C0   <request key> <tsc>     the request goes into its connection, TCP or shared memory (send order)
+    C1   <request key> <tsc>     its send returned
     C7   <request key> <tsc>     its final response arrives
     C7m  <update key> <tsc>      an ADD / CANCEL update arrives
     LINK <request key> <update key>  the update a request caused (from its ACCEPTED / CANCELED)
@@ -25,9 +25,9 @@ The order server's socket stages are logged per poll or per socket, not per requ
 M6 is logged once per publisher iteration: an update's M6 is the next M6 after its M5 in the
 publisher's log.
 
-C1 isn't on the path: on loopback the kernel puts the request into the order server's socket
-inside the client's send(), so the order server can read it before that send() returns. C0 -> C1
-is printed on its own, it's part of C0 -> P1.
+C1 isn't on the path: over TCP on loopback the kernel puts the request into the order server's
+socket inside the client's send(), so the order server can read it before that send() returns.
+C0 -> C1 is printed on its own, it's part of C0 -> P1.
 
 The first --warmup-pct of requests (in send order) are left out, as in the benchmark's own report.
 Each path's table only has requests traced at every one of its stages, so the stage means add up to
@@ -53,28 +53,28 @@ _spec.loader.exec_module(perf)
 
 REQUEST_STAGES = ("T1", "T2", "T3", "T4", "T5")
 RESPONSE_PATH = [
-    ("C0", "P1", "client send(), until the order server's epoll_wait"),
-    ("P1", "R0", "reads of other sockets in the same poll"),
-    ("R0", "R1", "recvmsg"),
+    ("C0", "P1", "client sends, until the order server's next poll"),
+    ("P1", "R0", "reads of other clients in the same poll"),
+    ("R0", "R1", "read (recvmsg)"),
     ("R1", "T1", "parse"),
-    ("T1", "T2", "rest of the socket pass, sequencer, batch published"),
+    ("T1", "T2", "rest of the poll, sequencer, batch published"),
     ("T2", "T3", "waiting in the request queue"),
     ("T3", "T4", "matching engine"),
     ("T4", "T5", "waiting in the response queue"),
-    ("T5", "S0", "rest of the response drain, other sockets' sends"),
-    ("S0", "T6", "send() into TCP"),
-    ("T6", "C7", "TCP out, client read"),
+    ("T5", "S0", "rest of the response drain, other clients' sends"),
+    ("S0", "T6", "send to the client"),
+    ("T6", "C7", "to the client, client reads"),
 ]
 # Without R0/R1 lines (the shared memory order server): P1 straight to T1.
-RESPONSE_PATH_NO_READS = [RESPONSE_PATH[0], ("P1", "T1", "the clients' rings up to this one, parse")] + RESPONSE_PATH[4:]
-# The exchange's own work on a request: the response path without the syscalls (recvmsg, send())
-# and the client's side.
+RESPONSE_PATH_NO_READS = [RESPONSE_PATH[0], ("P1", "T1", "reads of the clients up to this one, parse")] + RESPONSE_PATH[4:]
+# The exchange's own work on a request: the response path without the transport (TCP's recvmsg
+# and send(), or the ring copies) and the client's side.
 SYSCALL_STAGES = {("C0", "P1"), ("R0", "R1"), ("S0", "T6"), ("T6", "C7")}
 
 
 def no_syscall_paths(response_path):
     """The response path without the syscalls, and the market data path up to the publisher
-    reading the update (M5 -> M6 has the publisher's UDP sends in it, it isn't split)."""
+    reading the update (M5 -> M6 has the publisher's sends in it, it isn't split)."""
     no_syscalls = [s for s in response_path if s[:2] not in SYSCALL_STAGES]
     md = [s for s in no_syscalls if s[1] in ("R0", "T1", "T2", "T3", "T4")] + [
         ("T4", "M5", "waiting in the market update queue")]
@@ -85,7 +85,7 @@ MARKET_DATA_PATH = [
     ("C0", "T4", "request in, up to the engine publishing (as above)"),
     ("T4", "M5", "waiting in the market update queue"),
     ("M5", "M6", "market data publisher"),
-    ("M6", "C7m", "UDP multicast, client read"),
+    ("M6", "C7m", "to the client, client reads"),
 ]
 
 
@@ -253,10 +253,10 @@ def main():
     no_syscall_path, no_syscall_md_path = no_syscall_paths(response_path)
     response = Path("request -> final response", response_path, ("C0", "C7"))
     market_data = Path("request -> ADD / CANCEL update", MARKET_DATA_PATH, ("C0", "C7m"))
-    client_send = Path("the client's send() on its own, part of C0 -> P1", [], ("C0", "C1"), "send()")
-    no_syscalls = Path("request -> final response without syscalls and the client's side", no_syscall_path, None,
+    client_send = Path("the client's send on its own, part of C0 -> P1", [], ("C0", "C1"), "send")
+    no_syscalls = Path("request -> final response without the transport and the client's side", no_syscall_path, None,
                        "sum: the order server and the engine")
-    no_syscalls_md = Path("request -> publisher reads its update, without syscalls", no_syscall_md_path, None,
+    no_syscalls_md = Path("request -> publisher reads its update, without the transport", no_syscall_md_path, None,
                           "sum: the order server, the engine, the queue")
     path_stages = {s for a, b, _ in response_path for s in (a, b)}
     engine_rows = []

@@ -69,12 +69,17 @@ int main(int argc, char **argv) {
     matching_engine->start(cores.engine);
     // start market data publisher
     const std::string mkt_pub_iface = "lo";
-    const std::string snap_pub_ip = "233.252.14.1", inc_pub_ip ="233.252.14.3";
-    const int snap_pub_port = 20000, inc_pub_port = 20001;
+    // The incremental stream is in shared memory (market-data-channel.h), not on 233.252.14.3:20001.
+    // const std::string snap_pub_ip = "233.252.14.1", inc_pub_ip ="233.252.14.3";
+    // const int snap_pub_port = 20000, inc_pub_port = 20001;
+    const std::string snap_pub_ip = "233.252.14.1";
+    const int snap_pub_port = 20000;
     logger->log("%:% %() % Starting Market Data Publisher...\n", __FILE__, __LINE__, __FUNCTION__,
          Common::getCurrentTimeStr(&time_str));
-    market_data_publisher = new Exchange::MarketDataPublisher(&market_updates, mkt_pub_iface, 
-        snap_pub_ip, snap_pub_port, inc_pub_ip, inc_pub_port);
+    // market_data_publisher = new Exchange::MarketDataPublisher(&market_updates, mkt_pub_iface,
+    //     snap_pub_ip, snap_pub_port, inc_pub_ip, inc_pub_port);
+    market_data_publisher = new Exchange::MarketDataPublisher(&market_updates, mkt_pub_iface,
+        snap_pub_ip, snap_pub_port);
     market_data_publisher->start(cores.mdp, cores.snapshot);
     // order gateway.
     const std::string order_gw_iface = "lo";

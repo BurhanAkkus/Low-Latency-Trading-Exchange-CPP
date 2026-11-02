@@ -7,6 +7,7 @@
 // the market update it caused. A sender that falls behind the schedule is reported as schedule lag.
 #include "common/mcast-socket.h"
 #include "common/shared-region.h"
+#include "exchange/market-data/market-data-channel.h"
 #include "common/thread-utils.h"
 #include "exchange/market-data/market-update.h"
 #include "exchange/order-server/client-request.h"
@@ -252,28 +253,44 @@ int main(int argc, char** argv) {
   std::atomic<bool> run{true};
 
   // Market data: every update's arrival, seq numbers checked for gaps (lost datagrams).
-  McastSocket md_socket(logger);
-  ASSERT(md_socket.init(INCREMENTAL_IP, IFACE, INCREMENTAL_PORT, true) >= 0 && md_socket.join(INCREMENTAL_IP),
-         "Can't join the incremental market data.");
+  // McastSocket md_socket(logger);
+  // ASSERT(md_socket.init(INCREMENTAL_IP, IFACE, INCREMENTAL_PORT, true) >= 0 && md_socket.join(INCREMENTAL_IP),
+  //        "Can't join the incremental market data.");
+  // The publisher's ring in shared memory, once the exchange has created it.
+  SharedRegion<MarketDataChannel> market_data(MARKET_DATA_CHANNEL_NAME, SharedRegion<MarketDataChannel>::Open::ATTACH);
   std::vector<Update> updates;  // ADD and CANCEL only, matched to requests after the run.
   preallocate(updates, 2 * n);
   size_t md_updates = 0, md_lost = 0, md_next_seq = 0;
-  md_socket.recv_callback_ = [&](McastSocket* s) {
-    const auto time = now();
-    const auto tsc = Common::rdtsc();
-    for (size_t off = 0; off + sizeof(MDPMarketUpdate) <= s->next_rcv_valid_index_; off += sizeof(MDPMarketUpdate)) {
-      MDPMarketUpdate u;
-      memcpy(&u, s->inbound_data_.data() + off, sizeof(u));
-      if (md_next_seq && u.seq_num_ > md_next_seq) md_lost += u.seq_num_ - md_next_seq;
-      md_next_seq = u.seq_num_ + 1;
-      ++md_updates;
-      const auto& m = u.me_market_update_;
-      if (m.type_ == MarketUpdateType::ADD || m.type_ == MarketUpdateType::CANCEL)
-        updates.push_back({time, tsc, static_cast<uint32_t>(m.order_id_), static_cast<uint8_t>(m.ticker_id_), m.type_});
+  // md_socket.recv_callback_ = [&](McastSocket* s) {
+  //   const auto time = now();
+  //   const auto tsc = Common::rdtsc();
+  //   for (size_t off = 0; off + sizeof(MDPMarketUpdate) <= s->next_rcv_valid_index_; off += sizeof(MDPMarketUpdate)) {
+  //     MDPMarketUpdate u;
+  //     memcpy(&u, s->inbound_data_.data() + off, sizeof(u));
+  //     ...
+  //   }
+  //   s->next_rcv_valid_index_ = 0;
+  // };
+  // auto md_thread = createAndStartThread(cfg.md_core, "Benchmark/MarketData", [&]() { while (run) md_socket.sendAndRecv(); });
+  auto md_thread = createAndStartThread(cfg.md_core, "Benchmark/MarketData", [&]() {
+    // Reads return whole updates only. Zeroed, so its pages are in before the run (see preallocate).
+    std::vector<MDPMarketUpdate> got(1024);
+    while (run) {
+      const auto bytes = market_data->incremental_.read(got.data(), got.size() * sizeof(MDPMarketUpdate));
+      if (!bytes) continue;
+      const auto time = now();
+      const auto tsc = Common::rdtsc();
+      for (size_t k = 0; k < bytes / sizeof(MDPMarketUpdate); ++k) {
+        const auto& u = got[k];
+        if (md_next_seq && u.seq_num_ > md_next_seq) md_lost += u.seq_num_ - md_next_seq;
+        md_next_seq = u.seq_num_ + 1;
+        ++md_updates;
+        const auto& m = u.me_market_update_;
+        if (m.type_ == MarketUpdateType::ADD || m.type_ == MarketUpdateType::CANCEL)
+          updates.push_back({time, tsc, static_cast<uint32_t>(m.order_id_), static_cast<uint8_t>(m.ticker_id_), m.type_});
+      }
     }
-    s->next_rcv_valid_index_ = 0;
-  };
-  auto md_thread = createAndStartThread(cfg.md_core, "Benchmark/MarketData", [&]() { while (run) md_socket.sendAndRecv(); });
+  });
   ASSERT(md_thread != nullptr, "Failed to start the market data thread.");
 
   // Responses: every final response's arrival, per client seq numbers checked for gaps.
