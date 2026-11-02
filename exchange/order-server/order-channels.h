@@ -14,8 +14,9 @@ namespace Exchange{
     constexpr const char* ORDER_CHANNELS_NAME = "/exchange-orders";
     constexpr size_t ORDER_RING_SIZE = 64 * 1024;
 
-    // A slot's client, in place of TCP's accept and end of stream: CONNECTED once the client
-    // starts using it, CLOSED when it's done.
+    // A slot's client, in place of TCP's accept and end of stream: the client sets CONNECTED on a
+    // FREE slot and CLOSED when it's done, counting each in changes_. The order server sets CLOSED
+    // when it drops a client itself. A CLOSED slot isn't used again until the next run (a new region).
     enum class ClientState : uint32_t{
         FREE = 0,
         CONNECTED = 1,
@@ -23,6 +24,9 @@ namespace Exchange{
     };
 
     struct OrderChannels{
+        // Counts every CONNECTED and CLOSED a client sets: the order server rescans the slots'
+        // states only when it changed.
+        alignas(CACHE_LINE_SIZE) std::atomic<uint32_t> changes_{0};
         struct Client{
             alignas(CACHE_LINE_SIZE) std::atomic<ClientState> state_{ClientState::FREE};
             // Client -> order server.

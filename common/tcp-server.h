@@ -1,57 +1,8 @@
 #pragma once
 #include "tcp-socket.h"
-#include "constants.h"
-#include <array>
+#include "socket-list.h"
 #include <set>
 namespace Common {
-  // Sockets in a list: contains, insert, erase and clear in O(1), iterated like an array. Each
-  // socket keeps its place in the list in Index, one field per list: a socket can be in several.
-  // Every slot below size_ holds a socket in the list, so a socket is in it when the slot its
-  // Index points to holds it. A socket that left keeps a stale Index, which fails that check.
-  // Erase moves the last socket into the gap, so the order changes. Don't erase while
-  // iterating the same list, keepIf() removes while it iterates.
-  template <size_t TCPSocket::*Index>
-  struct SocketList {
-    std::array<TCPSocket *, ME_MAX_NUM_CLIENTS> sockets_{};
-    size_t size_ = 0;
-    auto contains(const TCPSocket *socket) const noexcept {
-      // Unsigned: index < size_ also keeps sockets_[index] in bounds.
-      const size_t index = socket->*Index;
-      return index < size_ && sockets_[index] == socket;
-    }
-    auto insert(TCPSocket *socket) noexcept -> void {
-      if (contains(socket)) return;
-      push(socket);
-    }
-    // Insert without the contains check: the caller guarantees the socket isn't in the list.
-    auto push(TCPSocket *socket) noexcept -> void {
-      socket->*Index = size_;
-      sockets_[size_++] = socket;
-    }
-    // The last socket takes the erased one's place.
-    auto erase(TCPSocket *socket) noexcept -> void {
-      if (!contains(socket)) return;
-      TCPSocket *last = sockets_[--size_];
-      sockets_[socket->*Index] = last;
-      last->*Index = socket->*Index;
-    }
-    // Every socket leaves the list.
-    auto clear() noexcept -> void { size_ = 0; }
-    // Keeps the sockets keep() returns true for, in their order, the others leave the list.
-    // keep() must not change the list.
-    template <typename Keep>
-    auto keepIf(Keep keep) noexcept -> void {
-      size_t kept = 0;
-      for (size_t i = 0; i < size_; ++i) {
-        auto socket = sockets_[i];
-        if (keep(socket)) { socket->*Index = kept; sockets_[kept++] = socket; }
-      }
-      size_ = kept;
-    }
-    auto begin() const noexcept { return sockets_.begin(); }
-    auto end() const noexcept { return sockets_.begin() + size_; }
-  };
-
   struct TCPServer {
   public:
     int efd_ = -1;
@@ -64,8 +15,8 @@ namespace Common {
     // sendAndRecv() has to run between two poll()s.
     // send_sockets_: the sockets with data in their send buffer, send() adds them, flush() sends
     // them.
-    SocketList<&TCPSocket::receive_index_> receive_sockets_;
-    SocketList<&TCPSocket::send_index_> send_sockets_;
+    SocketList<TCPSocket, &TCPSocket::receive_index_> receive_sockets_;
+    SocketList<TCPSocket, &TCPSocket::send_index_> send_sockets_;
     std::set<TCPSocket *> disconnected_sockets_;
     std::function<void(TCPSocket *s, Nanos rx_time)> recv_callback_;
     std::function<void()> recv_finished_callback_;

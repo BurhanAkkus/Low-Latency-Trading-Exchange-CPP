@@ -3,7 +3,8 @@
 #include "common/types.h"
 #include "common/lf-queue.h"
 #include "common/macros.h"
-#include "common/tcp-server.h"
+// #include "common/tcp-server.h"
+#include "exchange/order-server/shm-server.h"
 #include "exchange/order-server/client-request.h"
 #include "exchange/order-server/client-response.h"
 #include "exchange/order-server/fifo-sequencer.h"
@@ -31,16 +32,22 @@ namespace Exchange{
         Logger logger_;
         std::array<size_t, ME_MAX_NUM_CLIENTS> cid_next_outgoing_seq_num_;
         std::array<size_t, ME_MAX_NUM_CLIENTS> cid_next_expected_seq_num_;
-        std::array<TCPSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
-        TCPServer tcp_server_;
+        // Shared memory in place of TCP (the TCP version is on main).
+        // std::array<TCPSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
+        // TCPServer tcp_server_;
+        std::array<ShmSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
+        ShmServer server_;
         FIFOSequencer fifo_sequencer_;
-        
-        auto recvCallback(TCPSocket *socket, Nanos rx_time) noexcept {
+
+        // rx_time is TCP's kernel receive time, unused: each request carries its client's send_tsc_.
+        auto recvCallback(ShmSocket *socket, Nanos) noexcept {
             // logger_.log("%:% %() % Received socket:% len:% rx:%\n", __FILE__,
             // __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
             //             socket->fd_, socket->next_rcv_valid_index_, rx_time);
             
             // There is a complete object.
+            // ToDo - performance
+            // Skip. we only read whole objects.
             if (socket->next_rcv_valid_index_ >= sizeof(OMClientRequest)) {
                 size_t i = 0;
                 for (; i + sizeof(OMClientRequest) <= socket->next_rcv_valid_index_; i += sizeof(OMClientRequest)) {
@@ -67,9 +74,13 @@ namespace Exchange{
                         // send rejected.
                     }
                     next_expected_seq_num++;
-                    // Read from TCP.
+                    // Read from the client's ring.
                     TRACE(T1, traceKey(request->me_client_request_), logger_);
-                    fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
+                    // Sequenced by when the client sent it, on the TSC every process shares.
+                    // fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
+                    // ToDo - performance
+                    // carry them all together at once.
+                    fifo_sequencer_.addClientRequest(static_cast<Nanos>(request->send_tsc_), request->me_client_request_,i);
                 };
                 // copy the last incomplete portion to the beginning.
                 // we have read the portion [0,i].
