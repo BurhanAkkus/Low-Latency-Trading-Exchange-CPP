@@ -12,6 +12,7 @@ Stages are joined by key. All times are TSC cycles, one clock for every core and
 
     response:     C0 -> P1 -> R0 -> R1 -> T1 -> T2 -> T3 -> T4 -> T5 -> S0 -> T6 -> C7
     market data:  T4 -> M5 -> M6 -> C7m
+Without T2 lines (the shared memory order server doesn't log it) the path goes T1 -> T3.
 
 The order server's socket stages are logged per poll or per socket, not per request:
     P1   epoll_wait returned with something (shared memory: a pass over the clients' rings that read
@@ -67,6 +68,17 @@ RESPONSE_PATH = [
 ]
 # Without R0/R1 lines (the shared memory order server): P1 straight to T1.
 RESPONSE_PATH_NO_READS = [RESPONSE_PATH[0], ("P1", "T1", "scan, reads of the clients up to this one, parse")] + RESPONSE_PATH[4:]
+
+
+def without_t2(response_path):
+    """The response path without T2 lines: T1 straight to T3."""
+    path = []
+    for a, b, what in response_path:
+        if a == "T1" and b == "T2":
+            path.append(("T1", "T3", "rest of the poll, sort, publish, request queue"))
+        elif a != "T2":
+            path.append((a, b, what))
+    return path
 # The exchange's own work on a request: the response path without the transport (TCP's recvmsg
 # and send(), or the ring copies) and the client's side.
 SYSCALL_STAGES = {("C0", "P1"), ("R0", "R1"), ("S0", "T6"), ("T6", "C7")}
@@ -250,6 +262,8 @@ def main():
 
     # The TCP order server logs R0/R1 around its recvmsg, the shared memory one doesn't.
     response_path = RESPONSE_PATH if exchange.reads else RESPONSE_PATH_NO_READS
+    if not exchange.stages["T2"]:
+        response_path = without_t2(response_path)
     no_syscall_path, no_syscall_md_path = no_syscall_paths(response_path)
     response = Path("request -> final response", response_path, ("C0", "C7"))
     market_data = Path("request -> ADD / CANCEL update", MARKET_DATA_PATH, ("C0", "C7m"))

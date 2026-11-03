@@ -104,8 +104,10 @@ namespace Exchange{
             const auto end = batch_ + static_cast<std::ptrdiff_t>(pending_);
             std::sort(batch_, end, [](const MEClientRequest& a, const MEClientRequest& b) { return a.send_tsc_ < b.send_tsc_; });
             client_requests_->updateWriteIndex(pending_);
+            // No T2: it read the just-written slots back for their keys and logged a line per
+            // request. T1 -> T3 covers the sort, the publish and the wait in the queue.
             // In the request queue, the engine can read them from here on.
-            for (auto it = batch_; it != end; ++it) TRACE(T2, traceKey(*it), logger_);
+            // for (auto it = batch_; it != end; ++it) TRACE(T2, traceKey(*it), logger_);
             pending_ = 0;
         }
         auto run() noexcept -> void;
