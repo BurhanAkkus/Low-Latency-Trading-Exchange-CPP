@@ -66,7 +66,7 @@ RESPONSE_PATH = [
     ("T6", "C7", "to the client, client reads"),
 ]
 # Without R0/R1 lines (the shared memory order server): P1 straight to T1.
-RESPONSE_PATH_NO_READS = [RESPONSE_PATH[0], ("P1", "T1", "reads of the clients up to this one, parse")] + RESPONSE_PATH[4:]
+RESPONSE_PATH_NO_READS = [RESPONSE_PATH[0], ("P1", "T1", "scan, reads of the clients up to this one, parse")] + RESPONSE_PATH[4:]
 # The exchange's own work on a request: the response path without the transport (TCP's recvmsg
 # and send(), or the ring copies) and the client's side.
 SYSCALL_STAGES = {("C0", "P1"), ("R0", "R1"), ("S0", "T6"), ("T6", "C7")}

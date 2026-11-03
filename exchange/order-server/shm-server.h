@@ -55,9 +55,9 @@ namespace Exchange{
 
         // Into the send buffer.
         auto send(const void* data, size_t len) noexcept -> void;
-        // Reads the client's new requests into the receive buffer and calls recv_callback_. True if
-        // there were any.
-        auto receive() noexcept -> bool;
+        // Reads the client's requests from read up to written, its ring's counters as the pass
+        // loaded them, into the receive buffer and calls recv_callback_. True if there were any.
+        auto receive(size_t read, size_t written) noexcept -> bool;
         // Moves the send buffer into the client's responses ring, as much as fits, the rest stays
         // for the next call.
         auto flush() noexcept -> void;
@@ -65,8 +65,9 @@ namespace Exchange{
 
     // The order server's transport over shared memory, in place of TCPServer, with the same calls.
     // listen() creates the OrderChannels region. A client connects by setting its slot CONNECTED,
-    // poll() picks that up like an accept. sendAndRecv() checks every connected client's ring: no
-    // syscall, a load of the ring's counter for a client with nothing new.
+    // poll() picks that up like an accept. sendAndRecv() scans every slot's request counters, then
+    // reads only the clients that wrote something: no syscall, two loads for a client with
+    // nothing new.
     class ShmServer{
         public:
         std::function<void(ShmSocket* socket)> disconnect_callback_;
@@ -109,8 +110,15 @@ namespace Exchange{
         // The last changes_ seen: the slots' states are rescanned when it moves.
         uint32_t seen_changes_ = 0;
         std::array<ShmSocket*, ME_MAX_NUM_CLIENTS> by_slot_{};
-        // Connected clients, read on every pass.
+        // Connected clients.
         std::vector<ShmSocket*> sockets_;
+        // The pass's phase 1 lists the clients that wrote something, phase 2 reads them.
+        struct ToRead{
+            size_t slot_;
+            size_t read_;
+            size_t written_;
+        };
+        std::array<ToRead, ME_MAX_NUM_CLIENTS> to_read_;
         // Sockets with data in their send buffer, send() adds them, flush() sends them.
         SocketList<ShmSocket, &ShmSocket::send_index_> send_sockets_;
         // Dropped by the next poll().

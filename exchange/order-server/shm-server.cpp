@@ -14,17 +14,13 @@ namespace Exchange{
         next_send_valid_index_ += len;
     }
 
-    auto ShmSocket::receive() noexcept -> bool {
-        // Nothing new costs a load of the client's counter and ours. No R0/R1 around the read as
-        // for TCP's recvmsg: a ring read is a memcpy of a few dozen bytes.
-        auto& counters = channels_->request_counters_[fd_];
-        const auto written = counters.next_to_write_.load(std::memory_order_acquire);
-        // Only we store it.
-        const auto read = counters.next_to_read_.load(std::memory_order_relaxed);
+    auto ShmSocket::receive(size_t read, size_t written) noexcept -> bool {
         const auto n = RequestRing::read(channels_->request_buffers_[fd_], read, written,
             rcv_buffer_ + next_rcv_valid_index_, RECEIVE_BUFFER_SIZE - next_rcv_valid_index_);
+        // Not expected: the pass lists a client only with a whole request in its ring, and the
+        // receive buffer is empty between reads.
         if (!n) return false;
-        counters.next_to_read_.store(read + n, std::memory_order_release);
+        channels_->request_counters_[fd_].next_to_read_.store(read + n, std::memory_order_release);
         next_rcv_valid_index_ += n;
         // Each request carries its own send time, there is no receive time.
         recv_callback_(this, 0);
@@ -101,9 +97,23 @@ namespace Exchange{
     auto ShmServer::sendAndRecv() noexcept -> void {
         // When this pass started: P1 for the analysis, logged only for passes that read something.
         const auto pass_start = Common::rdtsc();
+        // Phase 1: which clients have a whole request to read. Only the request counters, back to
+        // back: a client with nothing new costs two loads, its socket isn't touched.
+        const auto& counters = channels_->get()->request_counters_;
+        size_t to_read = 0;
+        for (size_t slot = 0; slot < counters.size(); ++slot) {
+            const auto written = counters[slot].next_to_write_.load(std::memory_order_acquire);
+            // Only we store it.
+            const auto read = counters[slot].next_to_read_.load(std::memory_order_relaxed);
+            if (written - read >= sizeof(OMClientRequest)) to_read_[to_read++] = {slot, read, written};
+        }
+        // Phase 2: read them, up to what phase 1 saw. A slot without a socket isn't picked up by
+        // poll() yet, or was dropped.
         size_t received = 0;
-        for (auto socket : sockets_)
-            if (socket->receive()) ++received;
+        for (size_t i = 0; i < to_read; ++i) {
+            const auto& [slot, read, written] = to_read_[i];
+            if (auto socket = by_slot_[slot]; socket && socket->receive(read, written)) ++received;
+        }
         if (received) {
             TRACE_AT(P1, received, pass_start, logger_);
             recv_finished_callback_();
