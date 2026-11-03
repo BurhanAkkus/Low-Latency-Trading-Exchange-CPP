@@ -15,15 +15,18 @@ namespace Exchange{
     }
 
     auto ShmSocket::receive(size_t read, size_t written) noexcept -> bool {
-        const auto n = RequestRing::read(channels_->request_buffers_[fd_], read, written,
-            rcv_buffer_ + next_rcv_valid_index_, RECEIVE_BUFFER_SIZE - next_rcv_valid_index_);
-        // Not expected: the pass lists a client only with a whole request in its ring, and the
-        // receive buffer is empty between reads.
-        if (!n) return false;
-        channels_->request_counters_[fd_].next_to_read_.store(read + n, std::memory_order_release);
-        next_rcv_valid_index_ += n;
-        // Each request carries its own send time, there is no receive time.
-        recv_callback_(this, 0);
+        const auto& buffer = channels_->request_buffers_[fd_];
+        // One request at a time, copied out whole: it can wrap around the ring's end. Its ring
+        // position orders the client's own requests.
+        OMClientRequest request;
+        auto next = read;
+        while (RequestRing::read(buffer, next, written, &request, sizeof(request))) {
+            recv_callback_(this, request, next);
+            next += sizeof(request);
+        }
+        // Not expected: the pass lists a client only with a whole request in its ring.
+        if (next == read) return false;
+        channels_->request_counters_[fd_].next_to_read_.store(next, std::memory_order_release);
         return true;
     }
 
@@ -78,7 +81,7 @@ namespace Exchange{
             // ToDo - performance
             // early exit.
             if (state == ClientState::CONNECTED && !socket) {
-                // Allocated like a TCP accept. Its buffers are zeroed, so it doesn't page fault later.
+                // Allocated like a TCP accept. Its send buffer is zeroed, so it doesn't page fault later.
                 socket = new ShmSocket(logger_);
                 socket->fd_ = static_cast<int>(slot);
                 socket->channels_ = channels_->get();

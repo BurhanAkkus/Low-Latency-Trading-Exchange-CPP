@@ -10,15 +10,13 @@
 
 namespace Exchange{
     // One client of the shared memory transport, in place of a TCPSocket: its requests come out
-    // of its requests ring into rcv_buffer_, its responses go into send_buffer_ and flush() moves
-    // them into its responses ring.
+    // of its requests ring one at a time into recv_callback_, its responses go into send_buffer_
+    // and flush() moves them into its responses ring.
     struct ShmSocket{
         // The client's slot: the trace key in place of a socket's fd (T6fd, S0/T6).
         int fd_ = -1;
         // The region in this process, the client's rings are index fd_ of its arrays.
         OrderChannels* channels_ = nullptr;
-        // Whole requests only, so nothing is left over between reads.
-        static constexpr size_t RECEIVE_BUFFER_SIZE = ORDER_RING_SIZE;
         // Responses that didn't fit in the client's ring yet. A client this far behind is dropped.
         // ToDo - correctness
         // every response passes through here before flush(): a client getting more than
@@ -28,12 +26,6 @@ namespace Exchange{
         // Zeroed with the socket: its pages are in before the client's first request.
         // ToDo - performance
         // ring buffer instead of moving.
-        // ToDo - performance
-        // fields every pass reads first, buffers last: next_rcv_valid_index_ after the 64 KB
-        // rcv_buffer_ puts it on another page, a pass over 255 clients touches 255 more pages.
-        // Moved up, the response path was ~0.3 us faster (2.64-2.82 vs 3.03-3.07 us mean).
-        char rcv_buffer_[RECEIVE_BUFFER_SIZE]{};
-        size_t next_rcv_valid_index_ = 0;
         char send_buffer_[SEND_BUFFER_SIZE]{};
         size_t next_send_valid_index_ = 0;
         // The order server drops it: its send buffer overflowed, or the client CLOSED its slot.
@@ -41,7 +33,8 @@ namespace Exchange{
         bool closed_by_client_ = false;
         // Its place in the server's send list.
         size_t send_index_ = std::numeric_limits<size_t>::max();
-        std::function<void(ShmSocket* s, Nanos rx_time)> recv_callback_;
+        // A request of the client and its position in the client's ring.
+        std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback_;
         Logger& logger_;
 
         explicit ShmSocket(Logger& logger) : logger_(logger) {}
@@ -56,7 +49,7 @@ namespace Exchange{
         // Into the send buffer.
         auto send(const void* data, size_t len) noexcept -> void;
         // Reads the client's requests from read up to written, its ring's counters as the pass
-        // loaded them, into the receive buffer and calls recv_callback_. True if there were any.
+        // loaded them, and calls recv_callback_ with each. True if there were any.
         auto receive(size_t read, size_t written) noexcept -> bool;
         // Moves the send buffer into the client's responses ring, as much as fits, the rest stays
         // for the next call.
@@ -72,7 +65,7 @@ namespace Exchange{
         public:
         std::function<void(ShmSocket* socket)> disconnect_callback_;
 
-        ShmServer(Logger& logger, std::function<void(ShmSocket* s, Nanos rx_time)> recv_callback,
+        ShmServer(Logger& logger, std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback,
             std::function<void()> recv_finished_callback)
             : recv_callback_(std::move(recv_callback)), recv_finished_callback_(std::move(recv_finished_callback)),
               logger_(logger) {
@@ -102,7 +95,7 @@ namespace Exchange{
         auto flush() noexcept -> void;
 
         private:
-        std::function<void(ShmSocket* s, Nanos rx_time)> recv_callback_;
+        std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback_;
         std::function<void()> recv_finished_callback_;
         Logger& logger_;
         std::string time_str_;

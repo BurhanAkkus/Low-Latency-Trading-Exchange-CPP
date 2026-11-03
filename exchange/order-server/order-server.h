@@ -41,54 +41,41 @@ namespace Exchange{
         ShmServer server_;
         FIFOSequencer fifo_sequencer_;
 
-        // rx_time is TCP's kernel receive time, unused: each request carries its client's send_tsc_.
-        auto recvCallback(ShmSocket *socket, Nanos) noexcept {
+        // One request, read from the socket's ring at position. No rx_time as with TCP: each
+        // request carries its client's send_tsc_.
+        auto recvCallback(ShmSocket *socket, const OMClientRequest& request, size_t position) noexcept {
             // logger_.log("%:% %() % Received socket:% len:% rx:%\n", __FILE__,
             // __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
             //             socket->fd_, socket->next_rcv_valid_index_, rx_time);
-            
-            // There is a complete object.
-            // ToDo - performance
-            // Skip. we only read whole objects.
-            if (socket->next_rcv_valid_index_ >= sizeof(OMClientRequest)) {
-                size_t i = 0;
-                for (; i + sizeof(OMClientRequest) <= socket->next_rcv_valid_index_; i += sizeof(OMClientRequest)) {
-                    // request points to the socket's data.
-                    auto request = reinterpret_cast<const OMClientRequest*>(socket->rcv_buffer_ + i);
-                    // Check if this is the first request from this client.
-                    if (UNLIKELY(client_to_port_[request->me_client_request_.client_id_]
-                        == nullptr)) {
-                            client_to_port_[request->me_client_request_.client_id_] = socket;
-                            // The client's socket: T6 is logged per socket send, by fd.
-                            TRACE(T6fd, (request->me_client_request_.client_id_ << 32) | static_cast<uint64_t>(socket->fd_), logger_);
-                        }
-                    // Client is connected to another socket.
-                    // ToDo
-                    // Turn this into assert.
-                    else if(client_to_port_[request->me_client_request_.client_id_]  != socket){
-                            continue;
-                    }
-                    // Wrong sequence number. skip.
-                    auto &next_expected_seq_num = cid_next_expected_seq_num_[request->me_client_request_.client_id_];
-                    if (request->seq_num_ != next_expected_seq_num) {
-                        continue;
-                        //ToDo - correctness
-                        // send rejected.
-                    }
-                    next_expected_seq_num++;
-                    // Read from the client's ring.
-                    TRACE(T1, traceKey(request->me_client_request_), logger_);
-                    // Sequenced by when the client sent it, on the TSC every process shares.
-                    // fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
-                    // ToDo - performance
-                    // carry them all together at once.
-                    fifo_sequencer_.addClientRequest(static_cast<Nanos>(request->send_tsc_), request->me_client_request_,i);
-                };
-                // copy the last incomplete portion to the beginning.
-                // we have read the portion [0,i].
-                memcpy(socket->rcv_buffer_, socket->rcv_buffer_ + i, socket->next_rcv_valid_index_ - i);
-                socket->next_rcv_valid_index_ -= i;
+
+            // Check if this is the first request from this client.
+            if (UNLIKELY(client_to_port_[request.me_client_request_.client_id_]
+                == nullptr)) {
+                    client_to_port_[request.me_client_request_.client_id_] = socket;
+                    // The client's socket: T6 is logged per socket send, by fd.
+                    TRACE(T6fd, (request.me_client_request_.client_id_ << 32) | static_cast<uint64_t>(socket->fd_), logger_);
+                }
+            // Client is connected to another socket.
+            // ToDo
+            // Turn this into assert.
+            else if(client_to_port_[request.me_client_request_.client_id_]  != socket){
+                    return;
             }
+            // Wrong sequence number. skip.
+            auto &next_expected_seq_num = cid_next_expected_seq_num_[request.me_client_request_.client_id_];
+            if (request.seq_num_ != next_expected_seq_num) {
+                return;
+                //ToDo - correctness
+                // send rejected.
+            }
+            next_expected_seq_num++;
+            // Read from the client's ring.
+            TRACE(T1, traceKey(request.me_client_request_), logger_);
+            // Sequenced by when the client sent it, on the TSC every process shares.
+            // fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
+            // ToDo - performance
+            // carry them all together at once.
+            fifo_sequencer_.addClientRequest(static_cast<Nanos>(request.send_tsc_), request.me_client_request_, position);
         }
         auto recvFinishedCallback() noexcept {
             fifo_sequencer_.publishReceived();
