@@ -11,6 +11,8 @@ namespace Exchange{
     constexpr size_t MARKET_DATA_RING_SIZE = 4 * 1024 * 1024;
 
     struct MarketDataChannel{
-        SharedMemory<MARKET_DATA_RING_SIZE, sizeof(MDPMarketUpdate)> incremental_;
+        RingCounters incremental_counters_;
+        RingBuffer<MARKET_DATA_RING_SIZE> incremental_buffer_;
     };
+    using MarketDataRing = Ring<MARKET_DATA_RING_SIZE, sizeof(MDPMarketUpdate)>;
 }

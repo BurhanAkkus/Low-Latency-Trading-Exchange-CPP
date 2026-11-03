@@ -15,10 +15,16 @@ namespace Exchange{
     }
 
     auto ShmSocket::receive() noexcept -> bool {
-        // Nothing new costs a load of the ring's counter. No R0/R1 around the read as for TCP's
-        // recvmsg: a ring read is a memcpy of a few dozen bytes.
-        const auto n = channel_->requests_.read(rcv_buffer_ + next_rcv_valid_index_, RECEIVE_BUFFER_SIZE - next_rcv_valid_index_);
+        // Nothing new costs a load of the client's counter and ours. No R0/R1 around the read as
+        // for TCP's recvmsg: a ring read is a memcpy of a few dozen bytes.
+        auto& counters = channels_->request_counters_[fd_];
+        const auto written = counters.next_to_write_.load(std::memory_order_acquire);
+        // Only we store it.
+        const auto read = counters.next_to_read_.load(std::memory_order_relaxed);
+        const auto n = RequestRing::read(channels_->request_buffers_[fd_], read, written,
+            rcv_buffer_ + next_rcv_valid_index_, RECEIVE_BUFFER_SIZE - next_rcv_valid_index_);
         if (!n) return false;
+        counters.next_to_read_.store(read + n, std::memory_order_release);
         next_rcv_valid_index_ += n;
         // Each request carries its own send time, there is no receive time.
         recv_callback_(this, 0);
@@ -28,7 +34,8 @@ namespace Exchange{
     auto ShmSocket::flush() noexcept -> void {
         if (!next_send_valid_index_) return;
         const auto send_start = Common::rdtsc();
-        const auto sent = channel_->responses_.write(send_buffer_, next_send_valid_index_);
+        const auto sent = ResponseRing::write(channels_->response_counters_[fd_], channels_->response_buffers_[fd_],
+            send_buffer_, next_send_valid_index_);
         if (sent) {
             memmove(send_buffer_, send_buffer_ + sent, next_send_valid_index_ - sent);
             next_send_valid_index_ -= sent;
@@ -58,7 +65,7 @@ namespace Exchange{
             // The slot isn't reused in this run: it stays CLOSED with its rings as they are, a new
             // client there would read the old one's leftover responses. Dropped by us, the client
             // sees CLOSED too.
-            socket->channel_->state_.store(ClientState::CLOSED, std::memory_order_release);
+            channels_->get()->states_[socket->fd_].state_.store(ClientState::CLOSED, std::memory_order_release);
             logger_.log("%:% %() % dropped client slot:% closed by the client:%\n", __FILE__, __LINE__, __FUNCTION__,
                 Common::getCurrentTimeStr(&time_str_), socket->fd_, socket->closed_by_client_);
             delete socket;
@@ -68,9 +75,9 @@ namespace Exchange{
         const auto changes = channels_->get()->changes_.load(std::memory_order_acquire);
         if (LIKELY(changes == seen_changes_)) return;
         seen_changes_ = changes;
-        auto& clients = channels_->get()->clients_;
-        for (size_t slot = 0; slot < clients.size(); ++slot) {
-            const auto state = clients[slot].state_.load(std::memory_order_acquire);
+        auto& states = channels_->get()->states_;
+        for (size_t slot = 0; slot < states.size(); ++slot) {
+            const auto state = states[slot].state_.load(std::memory_order_acquire);
             auto socket = by_slot_[slot];
             // ToDo - performance
             // early exit.
@@ -78,7 +85,7 @@ namespace Exchange{
                 // Allocated like a TCP accept. Its buffers are zeroed, so it doesn't page fault later.
                 socket = new ShmSocket(logger_);
                 socket->fd_ = static_cast<int>(slot);
-                socket->channel_ = &clients[slot];
+                socket->channels_ = channels_->get();
                 socket->recv_callback_ = recv_callback_;
                 by_slot_[slot] = socket;
                 sockets_.push_back(socket);

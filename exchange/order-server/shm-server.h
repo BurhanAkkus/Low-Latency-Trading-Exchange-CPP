@@ -15,7 +15,8 @@ namespace Exchange{
     struct ShmSocket{
         // The client's slot: the trace key in place of a socket's fd (T6fd, S0/T6).
         int fd_ = -1;
-        OrderChannels::Client* channel_ = nullptr;
+        // The region in this process, the client's rings are index fd_ of its arrays.
+        OrderChannels* channels_ = nullptr;
         // Whole requests only, so nothing is left over between reads.
         static constexpr size_t RECEIVE_BUFFER_SIZE = ORDER_RING_SIZE;
         // Responses that didn't fit in the client's ring yet. A client this far behind is dropped.

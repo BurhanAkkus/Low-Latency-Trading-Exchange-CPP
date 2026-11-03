@@ -46,8 +46,11 @@ namespace Exchange{
         // Moves the pending buffer into the ring, as much as fits. Nothing to receive on this end.
         auto sendAndRecv() noexcept -> void {
             if (!next_send_valid_index_) return;
-            const auto sent = channel_->get()->incremental_.write(pending_.data(), next_send_valid_index_);
+            auto& channel = *channel_->get();
+            const auto sent = MarketDataRing::write(channel.incremental_counters_, channel.incremental_buffer_, pending_.data(), next_send_valid_index_);
             if (sent) {
+                // ToDo - performance
+                // avoid memmove. interpret as ring instead.
                 memmove(pending_.data(), pending_.data() + sent, next_send_valid_index_ - sent);
                 next_send_valid_index_ -= sent;
             }

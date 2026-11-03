@@ -170,9 +170,8 @@ namespace {
   // }
 
   // A full ring means the order server reads slower than we send, keep trying.
-  template <typename Ring>
-  auto writeAll(Ring& ring, const void* data, size_t len) noexcept {
-    for (size_t off = 0; off < len;) off += ring.write(static_cast<const char*>(data) + off, len - off);
+  auto writeAll(RingCounters& counters, RingBuffer<ORDER_RING_SIZE>& buffer, const void* data, size_t len) noexcept {
+    for (size_t off = 0; off < len;) off += RequestRing::write(counters, buffer, static_cast<const char*>(data) + off, len - off);
   }
 
   // A final response to a request: NEW gets ACCEPTED or REJECTED, CANCEL gets CANCELED or CANCEL_REJECTED.
@@ -241,10 +240,10 @@ int main(int argc, char** argv) {
   // for (size_t c = 1; c <= cfg.clients; ++c) fds[c] = connectClient();
   // A slot each in the order server's shared memory, once the exchange has created it.
   SharedRegion<OrderChannels> orders(ORDER_CHANNELS_NAME, SharedRegion<OrderChannels>::Open::ATTACH);
-  auto& slots = orders->clients_;
+  auto& channels = *orders.get();
   for (size_t c = 1; c <= cfg.clients; ++c) {
     auto expected = ClientState::FREE;
-    ASSERT(slots[c].state_.compare_exchange_strong(expected, ClientState::CONNECTED), "Client slot " + std::to_string(c) + " isn't free.");
+    ASSERT(channels.states_[c].state_.compare_exchange_strong(expected, ClientState::CONNECTED), "Client slot " + std::to_string(c) + " isn't free.");
     orders->changes_.fetch_add(1, std::memory_order_release);
   }
 
@@ -276,8 +275,12 @@ int main(int argc, char** argv) {
     // Reads return whole updates only. Zeroed, so its pages are in before the run (see preallocate).
     std::vector<MDPMarketUpdate> got(1024);
     while (run) {
-      const auto bytes = market_data->incremental_.read(got.data(), got.size() * sizeof(MDPMarketUpdate));
+      auto& counters = market_data->incremental_counters_;
+      const auto written = counters.next_to_write_.load(std::memory_order_acquire);
+      const auto read = counters.next_to_read_.load(std::memory_order_relaxed);
+      const auto bytes = MarketDataRing::read(market_data->incremental_buffer_, read, written, got.data(), got.size() * sizeof(MDPMarketUpdate));
       if (!bytes) continue;
+      counters.next_to_read_.store(read + bytes, std::memory_order_release);
       const auto time = now();
       const auto tsc = Common::rdtsc();
       for (size_t k = 0; k < bytes / sizeof(MDPMarketUpdate); ++k) {
@@ -307,8 +310,12 @@ int main(int argc, char** argv) {
     std::vector<size_t> next_seq(cfg.clients + 1, 1);
     while (run) {
       for (size_t c = 1; c <= cfg.clients; ++c) {
-        const auto bytes = slots[c].responses_.read(got.data(), got.size() * sizeof(OMClientResponse));
+        auto& counters = channels.response_counters_[c];
+        const auto written = counters.next_to_write_.load(std::memory_order_acquire);
+        const auto read = counters.next_to_read_.load(std::memory_order_relaxed);
+        const auto bytes = ResponseRing::read(channels.response_buffers_[c], read, written, got.data(), got.size() * sizeof(OMClientResponse));
         if (!bytes) continue;
+        counters.next_to_read_.store(read + bytes, std::memory_order_release);
         const auto time = now();
         const auto tsc = Common::rdtsc();
         for (size_t k = 0; k < bytes / sizeof(OMClientResponse); ++k) {
@@ -343,7 +350,8 @@ int main(int argc, char** argv) {
       // Its send time goes with it: the order server sequences by it.
       r.send_tsc_ = sent_tsc[i];
       // sendAll(fds[r.me_client_request_.client_id_], &r, sizeof(r));
-      writeAll(slots[r.me_client_request_.client_id_].requests_, &r, sizeof(r));
+      const auto client = r.me_client_request_.client_id_;
+      writeAll(channels.request_counters_[client], channels.request_buffers_[client], &r, sizeof(r));
       sent_end_tsc[i] = Common::rdtsc();
     }
   });
@@ -417,7 +425,7 @@ int main(int argc, char** argv) {
   }
   // for (size_t c = 1; c <= cfg.clients; ++c) close(fds[c]);
   for (size_t c = 1; c <= cfg.clients; ++c) {
-    slots[c].state_.store(ClientState::CLOSED, std::memory_order_release);
+    channels.states_[c].state_.store(ClientState::CLOSED, std::memory_order_release);
     orders->changes_.fetch_add(1, std::memory_order_release);
   }
   return responses.size() == n && !seq_gaps ? EXIT_SUCCESS : EXIT_FAILURE;

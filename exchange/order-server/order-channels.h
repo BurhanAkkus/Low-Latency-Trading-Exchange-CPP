@@ -23,21 +23,26 @@ namespace Exchange{
         CLOSED = 2
     };
 
-    // ToDo - performance
-    // the indices for sharedMemory carried into the front for ease of scanning.
-    // sharedMemory's buffers left inside.
+    // Grouped by role: each array holds one kind of thing for every slot, a slot's rings are the
+    // same index in each. A pass over the clients reads only request_counters_, back to back
+    // (32 KB), the buffers' pages only for clients with something to read.
     struct OrderChannels{
         // Counts every CONNECTED and CLOSED a client sets: the order server rescans the slots'
         // states only when it changed.
         alignas(CACHE_LINE_SIZE) std::atomic<uint32_t> changes_{0};
-        struct Client{
+        // Each on its own line.
+        struct State{
             alignas(CACHE_LINE_SIZE) std::atomic<ClientState> state_{ClientState::FREE};
-            // Client -> order server.
-            SharedMemory<ORDER_RING_SIZE, sizeof(OMClientRequest)> requests_;
-            // Order server -> client: the sequence number and the response, one OMClientResponse.
-            SharedMemory<ORDER_RING_SIZE, sizeof(OMClientResponse)> responses_;
         };
         static_assert(std::atomic<ClientState>::is_always_lock_free, "The state must work across processes.");
-        std::array<Client, ME_MAX_NUM_CLIENTS> clients_;
+        std::array<State, ME_MAX_NUM_CLIENTS> states_;
+        // Client -> order server.
+        std::array<RingCounters, ME_MAX_NUM_CLIENTS> request_counters_;
+        // Order server -> client: the sequence number and the response, one OMClientResponse.
+        std::array<RingCounters, ME_MAX_NUM_CLIENTS> response_counters_;
+        std::array<RingBuffer<ORDER_RING_SIZE>, ME_MAX_NUM_CLIENTS> request_buffers_;
+        std::array<RingBuffer<ORDER_RING_SIZE>, ME_MAX_NUM_CLIENTS> response_buffers_;
     };
+    using RequestRing = Ring<ORDER_RING_SIZE, sizeof(OMClientRequest)>;
+    using ResponseRing = Ring<ORDER_RING_SIZE, sizeof(OMClientResponse)>;
 }
