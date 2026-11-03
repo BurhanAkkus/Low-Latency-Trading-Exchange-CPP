@@ -30,7 +30,7 @@ namespace Exchange{
         sendClientResponses();
         }
     }
-    // Writes the responses to the clients' send buffers and sends them.
+    // Writes the responses into the clients' rings.
     auto OrderServer::sendClientResponses() noexcept -> void {
         // ToDo - improvement
         // group into clients and send them all together in a single write.
@@ -42,14 +42,11 @@ namespace Exchange{
             if (client_response->type_ != ClientResponseType::FILLED)
                 TRACE(T5, traceKey(*client_response), logger_);
             auto &next_outgoing_seq_num = cid_next_outgoing_seq_num_[client_response->client_id_];
-            // ToDo - performance
-            // send together.
-            server_.send(socket, &next_outgoing_seq_num, sizeof(next_outgoing_seq_num));
-            server_.send(socket, client_response, sizeof(MEClientResponse));
+            // The sequence number and the response in one write.
+            const OMClientResponse response{next_outgoing_seq_num, *client_response};
+            server_.send(socket, &response, sizeof(response));
             ++next_outgoing_seq_num;
             }
-        // One send per socket, with all of its responses.
-        server_.flush();
     }
     auto OrderServer::start(int core_id) noexcept -> void {
         run_ = true;

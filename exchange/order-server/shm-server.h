@@ -1,38 +1,23 @@
 #pragma once
 #include "common/logging.h"
 #include "common/shared-region.h"
-#include "common/socket-list.h"
 #include "exchange/order-server/order-channels.h"
 #include <functional>
-#include <limits>
 #include <memory>
 #include <vector>
 
 namespace Exchange{
     // One client of the shared memory transport, in place of a TCPSocket: its requests come out
-    // of its requests ring one at a time into recv_callback_, its responses go into send_buffer_
-    // and flush() moves them into its responses ring.
+    // of its requests ring one at a time into recv_callback_, its responses go straight into its
+    // responses ring.
     struct ShmSocket{
         // The client's slot: the trace key in place of a socket's fd (T6fd, S0/T6).
         int fd_ = -1;
         // The region in this process, the client's rings are index fd_ of its arrays.
         OrderChannels* channels_ = nullptr;
-        // Responses that didn't fit in the client's ring yet. A client this far behind is dropped.
-        // ToDo - correctness
-        // every response passes through here before flush(): a client getting more than
-        // SEND_BUFFER_SIZE of responses in one drain is dropped even with an empty ring. Flush
-        // into the ring when this fills up instead.
-        static constexpr size_t SEND_BUFFER_SIZE = 2 * ORDER_RING_SIZE;
-        // Zeroed with the socket: its pages are in before the client's first request.
-        // ToDo - performance
-        // ring buffer instead of moving.
-        char send_buffer_[SEND_BUFFER_SIZE]{};
-        size_t next_send_valid_index_ = 0;
-        // The order server drops it: its send buffer overflowed, or the client CLOSED its slot.
+        // The order server drops it: a response didn't fit in its ring, or the client CLOSED its slot.
         bool send_disconnected_ = false;
         bool closed_by_client_ = false;
-        // Its place in the server's send list.
-        size_t send_index_ = std::numeric_limits<size_t>::max();
         // A request of the client and its position in the client's ring.
         std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback_;
         Logger& logger_;
@@ -46,21 +31,19 @@ namespace Exchange{
         ShmSocket(const ShmSocket&&) = delete; // Move ctor
         ShmSocket& operator=(const ShmSocket&&) = delete; // Move assignment
 
-        // Into the send buffer.
-        auto send(const void* data, size_t len) noexcept -> void;
+        // Into the client's responses ring. False if it didn't all fit, or the client is already
+        // to be dropped.
+        auto send(const void* data, size_t len) noexcept -> bool;
         // Reads the client's requests from read up to written, its ring's counters as the pass
         // loaded them, and calls recv_callback_ with each. True if there were any.
         auto receive(size_t read, size_t written) noexcept -> bool;
-        // Moves the send buffer into the client's responses ring, as much as fits, the rest stays
-        // for the next call.
-        auto flush() noexcept -> void;
     };
 
-    // The order server's transport over shared memory, in place of TCPServer, with the same calls.
-    // listen() creates the OrderChannels region. A client connects by setting its slot CONNECTED,
-    // poll() picks that up like an accept. sendAndRecv() scans every slot's request counters, then
-    // reads only the clients that wrote something: no syscall, two loads for a client with
-    // nothing new.
+    // The order server's transport over shared memory, in place of TCPServer, with the same calls
+    // but flush(): send() writes straight into the client's ring. listen() creates the
+    // OrderChannels region. A client connects by setting its slot CONNECTED, poll() picks that up
+    // like an accept. sendAndRecv() scans every slot's request counters, then reads only the
+    // clients that wrote something: no syscall, two loads for a client with nothing new.
     class ShmServer{
         public:
         std::function<void(ShmSocket* socket)> disconnect_callback_;
@@ -84,15 +67,12 @@ namespace Exchange{
         auto listen() -> void;
         // Drops the clients disconnected since the last call, picks up new ones.
         auto poll() noexcept -> void;
-        // Reads every connected client, then sends what's in the send buffers.
+        // Reads every client with a whole request in its ring. Nothing to send, send() did.
         auto sendAndRecv() noexcept -> void;
-        // Into the socket's send buffer, the next flush() sends it.
+        // Into the socket's responses ring. A client it didn't fit is dropped by the next poll().
         auto send(ShmSocket* socket, const void* data, size_t len) noexcept -> void {
-            socket->send(data, len);
-            send_sockets_.insert(socket);
+            if (UNLIKELY(!socket->send(data, len))) markDisconnected(socket);
         }
-        // Sends the send buffers of send_sockets_.
-        auto flush() noexcept -> void;
 
         private:
         std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback_;
@@ -112,8 +92,6 @@ namespace Exchange{
             size_t written_;
         };
         std::array<ToRead, ME_MAX_NUM_CLIENTS> to_read_;
-        // Sockets with data in their send buffer, send() adds them, flush() sends them.
-        SocketList<ShmSocket, &ShmSocket::send_index_> send_sockets_;
         // Dropped by the next poll().
         std::vector<ShmSocket*> disconnected_sockets_;
 

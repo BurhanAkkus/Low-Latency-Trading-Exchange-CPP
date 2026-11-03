@@ -4,14 +4,22 @@
 #include <algorithm>
 
 namespace Exchange{
-    auto ShmSocket::send(const void* data, size_t len) noexcept -> void {
+    auto ShmSocket::send(const void* data, size_t len) noexcept -> bool {
+        if (UNLIKELY(send_disconnected_)) return false;
+        const auto send_start = Common::rdtsc();
+        const auto sent = ResponseRing::write(channels_->response_counters_[fd_], channels_->response_buffers_[fd_],
+            data, len);
         // The client doesn't read what it's sent: drop it rather than lose data or stall everyone.
-        if (UNLIKELY(send_disconnected_ || next_send_valid_index_ + len > SEND_BUFFER_SIZE)) {
+        // A part that fit stays unread, the client reads whole responses only.
+        if (UNLIKELY(sent != len)) {
             send_disconnected_ = true;
-            return;
+            return false;
         }
-        memcpy(send_buffer_ + next_send_valid_index_, data, len);
-        next_send_valid_index_ += len;
+        // In the client's ring. As for TCP, by fd: the analysis takes the first write after a
+        // response's T5, S0 is when it started.
+        TRACE_AT(S0, fd_, send_start, logger_);
+        TRACE(T6, fd_, logger_);
+        return true;
     }
 
     auto ShmSocket::receive(size_t read, size_t written) noexcept -> bool {
@@ -30,21 +38,6 @@ namespace Exchange{
         return true;
     }
 
-    auto ShmSocket::flush() noexcept -> void {
-        if (!next_send_valid_index_) return;
-        const auto send_start = Common::rdtsc();
-        const auto sent = ResponseRing::write(channels_->response_counters_[fd_], channels_->response_buffers_[fd_],
-            send_buffer_, next_send_valid_index_);
-        if (sent) {
-            memmove(send_buffer_, send_buffer_ + sent, next_send_valid_index_ - sent);
-            next_send_valid_index_ -= sent;
-            // In the client's ring. As for TCP, by fd: the analysis takes the first write after a
-            // response's T5, S0 is when it started.
-            TRACE_AT(S0, fd_, send_start, logger_);
-            TRACE(T6, fd_, logger_);
-        }
-    }
-
     ShmServer::~ShmServer() {
         for (auto socket : sockets_) delete socket;
     }
@@ -57,7 +50,6 @@ namespace Exchange{
 
     auto ShmServer::poll() noexcept -> void {
         for (auto socket : disconnected_sockets_) {
-            send_sockets_.erase(socket);
             std::erase(sockets_, socket);
             by_slot_[socket->fd_] = nullptr;
             disconnect_callback_(socket);
@@ -81,7 +73,7 @@ namespace Exchange{
             // ToDo - performance
             // early exit.
             if (state == ClientState::CONNECTED && !socket) {
-                // Allocated like a TCP accept. Its send buffer is zeroed, so it doesn't page fault later.
+                // Allocated like a TCP accept.
                 socket = new ShmSocket(logger_);
                 socket->fd_ = static_cast<int>(slot);
                 socket->channels_ = channels_->get();
@@ -121,20 +113,6 @@ namespace Exchange{
             TRACE_AT(P1, received, pass_start, logger_);
             recv_finished_callback_();
         }
-        flush();
-    }
-
-    // A socket stays in send_sockets_ while its send buffer has data the client's ring had no room
-    // for, the next flush() tries again.
-    auto ShmServer::flush() noexcept -> void {
-        send_sockets_.keepIf([this](ShmSocket* socket) {
-            socket->flush();
-            if (UNLIKELY(socket->send_disconnected_)) {
-                markDisconnected(socket);
-                return false;
-            }
-            return socket->next_send_valid_index_ != 0;
-        });
     }
 
     // The next poll() drops it.

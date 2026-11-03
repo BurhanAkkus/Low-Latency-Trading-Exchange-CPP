@@ -61,7 +61,7 @@ RESPONSE_PATH = [
     ("T2", "T3", "waiting in the request queue"),
     ("T3", "T4", "matching engine"),
     ("T4", "T5", "waiting in the response queue"),
-    ("T5", "S0", "rest of the response drain, other clients' sends"),
+    ("T5", "S0", "until its write into the client's ring"),
     ("S0", "T6", "send to the client"),
     ("T6", "C7", "to the client, client reads"),
 ]
