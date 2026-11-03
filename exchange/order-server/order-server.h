@@ -7,7 +7,8 @@
 #include "exchange/order-server/shm-server.h"
 #include "exchange/order-server/client-request.h"
 #include "exchange/order-server/client-response.h"
-#include "exchange/order-server/fifo-sequencer.h"
+// #include "exchange/order-server/fifo-sequencer.h"
+#include <algorithm>
 #include <array>
 using namespace Common;
 
@@ -39,11 +40,19 @@ namespace Exchange{
         // TCPServer tcp_server_;
         std::array<ShmSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
         ShmServer server_;
-        FIFOSequencer fifo_sequencer_;
+        // Requests go straight into the request queue and are sorted there 
+        // This pass's requests, in the request queue's slots after the published ones: batch_ is
+        // the first, pending_ how many. recvFinishedCallback() sorts and publishes them.
+        ClientRequestLFQueue::Unpublished batch_;
+        size_t pending_ = 0;
+        // Slots after these known to be free, counted down per request: at 0 the queue is asked
+        // again.
+        size_t free_slots_ = 0;
 
-        // One request, read from the socket's ring at position. No rx_time as with TCP: each
-        // request carries its client's send_tsc_.
-        auto recvCallback(ShmSocket *socket, const OMClientRequest& request, size_t position) noexcept {
+        // One request, read from the socket's ring. False if the request queue has no room for
+        // it: it stays in the ring. No rx_time as with TCP: each request carries its client's
+        // send_tsc_.
+        auto recvCallback(ShmSocket *socket, const OMClientRequest& request) noexcept -> bool {
             // logger_.log("%:% %() % Received socket:% len:% rx:%\n", __FILE__,
             // __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
             //             socket->fd_, socket->next_rcv_valid_index_, rx_time);
@@ -59,26 +68,45 @@ namespace Exchange{
             // ToDo
             // Turn this into assert.
             else if(client_to_port_[request.me_client_request_.client_id_]  != socket){
-                    return;
+                    return true;
             }
             // Wrong sequence number. skip.
             auto &next_expected_seq_num = cid_next_expected_seq_num_[request.me_client_request_.client_id_];
             if (request.seq_num_ != next_expected_seq_num) {
-                return;
+                return true;
                 //ToDo - correctness
                 // send rejected.
             }
+            if (UNLIKELY(!free_slots_)) {
+                // Reloads the engine's read index only if the queue's cached one says it's full.
+                free_slots_ = client_requests_->freeSlots(pending_ + 1) - pending_;
+                // Before its seq number is counted: the next pass reads it again.
+                if (!free_slots_) return false;
+            }
+            --free_slots_;
             next_expected_seq_num++;
             // Read from the client's ring.
             TRACE(T1, traceKey(request.me_client_request_), logger_);
-            // Sequenced by when the client sent it, on the TSC every process shares.
-            // fifo_sequencer_.addClientRequest(rx_time, request->me_client_request_,i);
-            // ToDo - performance
-            // carry them all together at once.
-            fifo_sequencer_.addClientRequest(static_cast<Nanos>(request.send_tsc_), request.me_client_request_, position);
+            if (!pending_) batch_ = client_requests_->unpublished();
+            batch_[pending_++] = request.me_client_request_;
+            return true;
         }
+        // Sorts this pass's requests by when their clients sent them, on the TSC every process
+        // shares, and publishes them.
         auto recvFinishedCallback() noexcept {
-            fifo_sequencer_.publishReceived();
+            if (!pending_) return;
+            // ToDo - research
+            // faster sort for this instance?
+            // radix sort, we can use the previous publish's timestamp
+            // and the current time so we have both an upper and a lower bound for values.
+            // ToDo - improvement
+            // each client's requests are already in send order: merge them instead of sorting.
+            const auto end = batch_ + static_cast<std::ptrdiff_t>(pending_);
+            std::sort(batch_, end, [](const MEClientRequest& a, const MEClientRequest& b) { return a.send_tsc_ < b.send_tsc_; });
+            client_requests_->updateWriteIndex(pending_);
+            // In the request queue, the engine can read them from here on.
+            for (auto it = batch_; it != end; ++it) TRACE(T2, traceKey(*it), logger_);
+            pending_ = 0;
         }
         auto run() noexcept -> void;
         auto sendClientResponses() noexcept -> void;

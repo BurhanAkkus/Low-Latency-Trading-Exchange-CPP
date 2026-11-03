@@ -57,7 +57,7 @@ RESPONSE_PATH = [
     ("P1", "R0", "reads of other clients in the same poll"),
     ("R0", "R1", "read (recvmsg)"),
     ("R1", "T1", "parse"),
-    ("T1", "T2", "rest of the poll, sequencer, batch published"),
+    ("T1", "T2", "rest of the poll, sort, batch published"),
     ("T2", "T3", "waiting in the request queue"),
     ("T3", "T4", "matching engine"),
     ("T4", "T5", "waiting in the response queue"),

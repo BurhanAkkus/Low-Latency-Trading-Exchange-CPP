@@ -140,7 +140,7 @@ namespace {
         r.cancel_index[c].push_back(NONE);
       }
       ++requests_of[c];
-      r.stream.push_back({requests_of[c], 0, request});  // seq numbers start at 1. send_tsc_ is 0 here.
+      r.stream.push_back({requests_of[c], request});  // seq numbers start at 1. send_tsc_ is 0 here.
     }
     return r;
   }
@@ -348,7 +348,7 @@ int main(int argc, char** argv) {
       sent_at[i] = now();  // the request goes into its client's ring.
       sent_tsc[i] = Common::rdtsc();
       // Its send time goes with it: the order server sequences by it.
-      r.send_tsc_ = sent_tsc[i];
+      r.me_client_request_.send_tsc_ = sent_tsc[i];
       // sendAll(fds[r.me_client_request_.client_id_], &r, sizeof(r));
       const auto client = r.me_client_request_.client_id_;
       writeAll(channels.request_counters_[client], channels.request_buffers_[client], &r, sizeof(r));

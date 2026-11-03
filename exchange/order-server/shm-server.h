@@ -18,8 +18,8 @@ namespace Exchange{
         // The order server drops it: a response didn't fit in its ring, or the client CLOSED its slot.
         bool send_disconnected_ = false;
         bool closed_by_client_ = false;
-        // A request of the client and its position in the client's ring.
-        std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback_;
+        // A request of the client. False if the order server has no room for it now.
+        std::function<bool(ShmSocket* s, const OMClientRequest& request)> recv_callback_;
         Logger& logger_;
 
         explicit ShmSocket(Logger& logger) : logger_(logger) {}
@@ -35,7 +35,8 @@ namespace Exchange{
         // to be dropped.
         auto send(const void* data, size_t len) noexcept -> bool;
         // Reads the client's requests from read up to written, its ring's counters as the pass
-        // loaded them, and calls recv_callback_ with each. True if there were any.
+        // loaded them, and calls recv_callback_ with each. False if recv_callback_ had no room for
+        // one: it and the ones after it stay in the ring.
         auto receive(size_t read, size_t written) noexcept -> bool;
     };
 
@@ -48,7 +49,7 @@ namespace Exchange{
         public:
         std::function<void(ShmSocket* socket)> disconnect_callback_;
 
-        ShmServer(Logger& logger, std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback,
+        ShmServer(Logger& logger, std::function<bool(ShmSocket* s, const OMClientRequest& request)> recv_callback,
             std::function<void()> recv_finished_callback)
             : recv_callback_(std::move(recv_callback)), recv_finished_callback_(std::move(recv_finished_callback)),
               logger_(logger) {
@@ -75,7 +76,7 @@ namespace Exchange{
         }
 
         private:
-        std::function<void(ShmSocket* s, const OMClientRequest& request, size_t position)> recv_callback_;
+        std::function<bool(ShmSocket* s, const OMClientRequest& request)> recv_callback_;
         std::function<void()> recv_finished_callback_;
         Logger& logger_;
         std::string time_str_;

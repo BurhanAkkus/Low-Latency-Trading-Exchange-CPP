@@ -25,7 +25,6 @@ add_library(libexchange STATIC
     matcher/matching-engine.cpp
     matcher/me-order.cpp
     order-book/order-book.cpp
-    ${REPO_ROOT}/exchange/order-server/fifo-sequencer.cpp
     ${REPO_ROOT}/exchange/order-server/order-server.cpp
     ${REPO_ROOT}/exchange/order-server/shm-server.cpp
     ${REPO_ROOT}/exchange/market-data/market-data-publisher.cpp

@@ -24,18 +24,21 @@ namespace Exchange{
 
     auto ShmSocket::receive(size_t read, size_t written) noexcept -> bool {
         const auto& buffer = channels_->request_buffers_[fd_];
-        // One request at a time, copied out whole: it can wrap around the ring's end. Its ring
-        // position orders the client's own requests.
+        // One request at a time, copied out whole: it can wrap around the ring's end.
         OMClientRequest request;
         auto next = read;
+        auto taken = true;
         while (RequestRing::read(buffer, next, written, &request, sizeof(request))) {
-            recv_callback_(this, request, next);
+            // No room for it: it stays in the ring with the ones after it, as unread bytes stay
+            // in a TCP socket.
+            if (UNLIKELY(!recv_callback_(this, request))) {
+                taken = false;
+                break;
+            }
             next += sizeof(request);
         }
-        // Not expected: the pass lists a client only with a whole request in its ring.
-        if (next == read) return false;
-        channels_->request_counters_[fd_].next_to_read_.store(next, std::memory_order_release);
-        return true;
+        if (next != read) channels_->request_counters_[fd_].next_to_read_.store(next, std::memory_order_release);
+        return taken;
     }
 
     ShmServer::~ShmServer() {
@@ -107,7 +110,11 @@ namespace Exchange{
         size_t received = 0;
         for (size_t i = 0; i < to_read; ++i) {
             const auto& [slot, read, written] = to_read_[i];
-            if (auto socket = by_slot_[slot]; socket && socket->receive(read, written)) ++received;
+            auto socket = by_slot_[slot];
+            if (!socket) continue;
+            ++received;
+            // The order server has no room: the rest waits in the rings for the next pass.
+            if (UNLIKELY(!socket->receive(read, written))) break;
         }
         if (received) {
             TRACE_AT(P1, received, pass_start, logger_);

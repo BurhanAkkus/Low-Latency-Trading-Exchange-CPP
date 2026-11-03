@@ -8,9 +8,9 @@ namespace Exchange{
             ClientResponseLFQueue* client_responses):
                 client_requests_{client_requests}, client_responses_{client_responses},
                 logger_("exchange_order_server.log"),
-                server_{logger_, [this](auto socket, const auto& request, auto position) { recvCallback(socket, request, position); },
-                    [this]() { recvFinishedCallback(); }},
-                fifo_sequencer_(client_requests, &logger_, [this]() { sendClientResponses(); }){
+                server_{logger_, [this](auto socket, const auto& request) { return recvCallback(socket, request); },
+                    [this]() { recvFinishedCallback(); }}{
+                // fifo_sequencer_(client_requests, &logger_, [this]() { sendClientResponses(); }){
                     cid_next_outgoing_seq_num_.fill(1);
                     cid_next_expected_seq_num_.fill(1);
                     client_to_port_.fill(nullptr);

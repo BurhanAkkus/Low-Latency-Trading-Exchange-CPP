@@ -4,6 +4,9 @@
 #include "constants.h"
 #include <atomic>
 #include <bit>
+#include <compare>
+#include <cstddef>
+#include <iterator>
 // To Do
 // Carry this implementation to use memory-pool.
 
@@ -15,7 +18,7 @@
 // 2-> A full queue makes the producer wait until the consumer frees a slot (backpressure).
 // Two threads that each write a queue the other reads can deadlock when both queues are full:
 // the order server waits for the engine to read a request while the engine waits for the order
-// server to read a response. Such a thread checks hasSpace() and keeps reading while it waits.
+// server to read a response. Such a thread checks freeSlots() and keeps reading while it waits.
 // 3-> Reader returns nullptr when there is nothing to read, forcing a nullcheck.
 namespace Common{
     template<typename T, size_t N>
@@ -51,14 +54,50 @@ namespace Common{
         // Check memory_orders.
 
         // Producer.
-        // True when the n slots after the published ones are free.
-        // ToDo - Improvement
-        // should return amount of space available.
-        auto hasSpace(size_t n = 1) noexcept -> bool{
-            const auto end = next_to_write_.load(std::memory_order_relaxed) + n;
-            if (end - cached_read_ <= N) return true;
+        // How many slots after the published ones are free, at least: counted from cached_read_,
+        // reloading next_to_read_ only when that says fewer than n. A caller that finds n free
+        // doesn't pull the consumer's cache line.
+        auto freeSlots(size_t n = 1) noexcept -> size_t{
+            const auto written = next_to_write_.load(std::memory_order_relaxed);
+            if (N - (written - cached_read_) >= n) return N - (written - cached_read_);
             cached_read_ = next_to_read_.load(std::memory_order_acquire);
-            return end - cached_read_ <= N;
+            return N - (written - cached_read_);
+        }
+        // The slots after the published ones, by their offset i from the first: a random access
+        // iterator, so a batch can be sorted in place before updateWriteIndex(n) publishes it. It
+        // wraps at the store's end. Holds the write index it was made with, an access doesn't
+        // reload next_to_write_. The caller checks the slots are free (freeSlots()).
+        class Unpublished{
+            T* store_ = nullptr;
+            size_t write_ = 0;
+            std::ptrdiff_t i_ = 0;
+            Unpublished(T* store, size_t write, std::ptrdiff_t i) noexcept : store_(store), write_(write), i_(i) {}
+            friend LFQueue;
+            public:
+            using iterator_category = std::random_access_iterator_tag;
+            using value_type = T;
+            using difference_type = std::ptrdiff_t;
+            using pointer = T*;
+            using reference = T&;
+            Unpublished() = default;
+            auto operator*() const noexcept -> T& { return store_[(write_ + i_) & MASK]; }
+            auto operator->() const noexcept -> T* { return &**this; }
+            auto operator[](difference_type n) const noexcept -> T& { return store_[(write_ + i_ + n) & MASK]; }
+            auto operator++() noexcept -> Unpublished& { ++i_; return *this; }
+            auto operator--() noexcept -> Unpublished& { --i_; return *this; }
+            auto operator++(int) noexcept -> Unpublished { auto old = *this; ++i_; return old; }
+            auto operator--(int) noexcept -> Unpublished { auto old = *this; --i_; return old; }
+            auto operator+=(difference_type n) noexcept -> Unpublished& { i_ += n; return *this; }
+            auto operator-=(difference_type n) noexcept -> Unpublished& { i_ -= n; return *this; }
+            friend auto operator+(Unpublished it, difference_type n) noexcept -> Unpublished { return it += n; }
+            friend auto operator+(difference_type n, Unpublished it) noexcept -> Unpublished { return it += n; }
+            friend auto operator-(Unpublished it, difference_type n) noexcept -> Unpublished { return it -= n; }
+            friend auto operator-(const Unpublished& a, const Unpublished& b) noexcept -> difference_type { return a.i_ - b.i_; }
+            friend auto operator==(const Unpublished& a, const Unpublished& b) noexcept -> bool { return a.i_ == b.i_; }
+            friend auto operator<=>(const Unpublished& a, const Unpublished& b) noexcept { return a.i_ <=> b.i_; }
+        };
+        auto unpublished(std::ptrdiff_t i = 0) noexcept -> Unpublished{
+            return {store_.data(), next_to_write_.load(std::memory_order_relaxed), i};
         }
         // offset > 0 returns the slots after the next one, fill them and publish them all
         // with one updateWriteIndex(n).
@@ -66,7 +105,7 @@ namespace Common{
         // pace, so pause between checks: fewer reloads of the consumer's cache line, which would
         // slow it down, and no syscall or sleep the producer has to wake up from.
         auto getNextWriteTo(size_t offset = 0) noexcept{
-            while (UNLIKELY(!hasSpace(offset + 1))) __builtin_ia32_pause();
+            while (UNLIKELY(freeSlots(offset + 1) < offset + 1)) __builtin_ia32_pause();
             return &store_[(next_to_write_.load(std::memory_order_relaxed) + offset) & MASK];
         }
         auto updateWriteIndex(size_t n = 1) noexcept{
