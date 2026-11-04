@@ -12,7 +12,6 @@ Stages are joined by key. All times are TSC cycles, one clock for every core and
 
     response:     C0 -> P1 -> R0 -> R1 -> T1 -> T2 -> T3 -> T4 -> T5 -> S0 -> T6 -> C7
     market data:  T4 -> M5 -> M6 -> C7m
-Without T2 lines (the shared memory order server doesn't log it) the path goes T1 -> T3.
 
 The order server's socket stages are logged per poll or per socket, not per request:
     P1   epoll_wait returned with something (shared memory: a pass over the clients' rings that read
@@ -23,6 +22,9 @@ The order server's socket stages are logged per poll or per socket, not per requ
          the shared memory order server, its path goes P1 -> T1.
     S0, T6  a send on a socket started and returned, by fd: a response's send is the first one on
          its client's socket at or after its T5.
+    T2   a batch of requests published into the request queue, by the batch's size: a request's
+         T2 is the first one at or after its T1 (the TCP version logs one per request after the
+         publish, the first of them is its batch's). Without T2 lines the path goes T1 -> T3.
 M6 is logged once per publisher iteration: an update's M6 is the next M6 after its M5 in the
 publisher's log.
 
@@ -52,7 +54,7 @@ _spec = importlib.util.spec_from_file_location(
 perf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(perf)
 
-REQUEST_STAGES = ("T1", "T2", "T3", "T4", "T5")
+REQUEST_STAGES = ("T1", "T3", "T4", "T5")
 RESPONSE_PATH = [
     ("C0", "P1", "client sends, until the order server's next poll"),
     ("P1", "R0", "reads of other clients in the same poll"),
@@ -132,6 +134,7 @@ class Exchange:
         self.reads = defaultdict(lambda: ([], []))
         self.sends = defaultdict(lambda: ([], []))
         self.polls = []
+        self.publishes = []
         self.client_fd = {}
         self.m5, self.m6 = {}, {}
         for path in paths:
@@ -156,6 +159,8 @@ class Exchange:
                         self.sends[a][tag == "T6"].append(b)
                     elif tag == "P1":
                         self.polls.append(b)
+                    elif tag == "T2":
+                        self.publishes.append(b)
                     elif tag == "T6fd":
                         self.client_fd[a >> 32] = a & 0xFFFFFFFF
                     elif tag == "M5":
@@ -167,8 +172,12 @@ class Exchange:
                         pending.clear()
 
     def socket_stages(self, t, client):
-        """P1, R0, R1 of the read that brought the request in, S0, T6 of the send that took its
-        response out. Leaves out what it can't find."""
+        """P1, R0, R1 of the read that brought the request in, T2 of the batch it was published in,
+        S0, T6 of the send that took its response out. Leaves out what it can't find."""
+        if t.get("T1") is not None:
+            j = bisect.bisect_left(self.publishes, t["T1"])
+            if j < len(self.publishes):
+                t["T2"] = self.publishes[j]
         fd = self.client_fd.get(client)
         if fd is None:
             return
@@ -262,7 +271,7 @@ def main():
 
     # The TCP order server logs R0/R1 around its recvmsg, the shared memory one doesn't.
     response_path = RESPONSE_PATH if exchange.reads else RESPONSE_PATH_NO_READS
-    if not exchange.stages["T2"]:
+    if not exchange.publishes:
         response_path = without_t2(response_path)
     no_syscall_path, no_syscall_md_path = no_syscall_paths(response_path)
     response = Path("request -> final response", response_path, ("C0", "C7"))
