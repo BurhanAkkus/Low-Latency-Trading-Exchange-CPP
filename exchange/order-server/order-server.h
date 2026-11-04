@@ -13,6 +13,39 @@
 using namespace Common;
 
 namespace Exchange{
+    // A batch's sort key: the request's send time relative to the batch's first, biased to stay
+    // positive (send times within 2^47 ticks of it, ~16 h), above the request's offset in the
+    // batch. Sorting the keys sorts by send time, ties in arrival order.
+    constexpr unsigned BATCH_OFFSET_BITS = 16;
+    constexpr uint64_t BATCH_OFFSET_MASK = (uint64_t{1} << BATCH_OFFSET_BITS) - 1;
+    inline auto batchKey(uint64_t send_tsc, uint64_t first_send_tsc, size_t offset) noexcept -> uint64_t {
+        return ((send_tsc - first_send_tsc + (uint64_t{1} << 47)) << BATCH_OFFSET_BITS) | offset;
+    }
+
+    // Puts the batch's n requests in the order of their keys: sorts the 8-byte keys, then moves
+    // each request once to its place, following the cycles of that order. The keys are used up.
+    template<typename Batch>
+    auto sortBatch(Batch batch, uint64_t* keys, size_t n) noexcept -> void {
+        std::sort(keys, keys + n);
+        for (size_t i = 0; i < n; ++i) {
+            // Place i takes the request at offset from, that one's place takes the next: a cycle,
+            // until the place that takes the request at i.
+            auto from = keys[i] & BATCH_OFFSET_MASK;
+            if (from == i) continue;
+            const auto first = batch[i];
+            auto to = i;
+            while (from != i) {
+                batch[to] = batch[from];
+                // Done: the outer loop skips it.
+                keys[to] = to;
+                to = from;
+                from = keys[to] & BATCH_OFFSET_MASK;
+            }
+            batch[to] = first;
+            keys[to] = to;
+        }
+    }
+
     class OrderServer{
         public:
         // Shared memory: no address to listen on.
@@ -45,6 +78,11 @@ namespace Exchange{
         // the first, pending_ how many. recvFinishedCallback() sorts and publishes them.
         ClientRequestLFQueue::Unpublished batch_;
         size_t pending_ = 0;
+        // Their sort keys (batchKey()), by offset, and the first one's send time. A full batch is
+        // published in the middle of a pass, the rest starts the next one.
+        std::array<uint64_t, ME_MAX_PENDING_REQUESTS> keys_;
+        static_assert(ME_MAX_PENDING_REQUESTS <= BATCH_OFFSET_MASK + 1, "A key holds the offset in the batch.");
+        uint64_t first_send_tsc_ = 0;
         // Slots after these known to be free, counted down per request: at 0 the queue is asked
         // again.
         size_t free_slots_ = 0;
@@ -77,6 +115,7 @@ namespace Exchange{
                 //ToDo - correctness
                 // send rejected.
             }
+            if (UNLIKELY(pending_ == keys_.size())) recvFinishedCallback();
             if (UNLIKELY(!free_slots_)) {
                 // Reloads the engine's read index only if the queue's cached one says it's full.
                 free_slots_ = client_requests_->freeSlots(pending_ + 1) - pending_;
@@ -87,13 +126,17 @@ namespace Exchange{
             next_expected_seq_num++;
             // Read from the client's ring.
             TRACE(T1, traceKey(request.me_client_request_), logger_);
-            if (!pending_) batch_ = client_requests_->unpublished();
+            if (!pending_) {
+                batch_ = client_requests_->unpublished();
+                first_send_tsc_ = request.send_tsc_;
+            }
+            keys_[pending_] = batchKey(request.send_tsc_, first_send_tsc_, pending_);
             batch_[pending_++] = request.me_client_request_;
             return true;
         }
         // Sorts this pass's requests by when their clients sent them, on the TSC every process
         // shares, and publishes them.
-        auto recvFinishedCallback() noexcept {
+        auto recvFinishedCallback() noexcept -> void {
             if (!pending_) return;
             // ToDo - research
             // faster sort for this instance?
@@ -101,8 +144,7 @@ namespace Exchange{
             // and the current time so we have both an upper and a lower bound for values.
             // ToDo - improvement
             // each client's requests are already in send order: merge them instead of sorting.
-            const auto end = batch_ + static_cast<std::ptrdiff_t>(pending_);
-            std::sort(batch_, end, [](const MEClientRequest& a, const MEClientRequest& b) { return a.send_tsc_ < b.send_tsc_; });
+            sortBatch(batch_, keys_.data(), pending_);
             client_requests_->updateWriteIndex(pending_);
             // In the request queue, the engine can read them from here on. Once per batch, by its
             // size: a request's T2 is the first one after its T1. Per request it read the slots

@@ -36,9 +36,6 @@ namespace Exchange{
         Price price_ = Price_INVALID;
         Qty qty_ = Qty_INVALID;
         Side side_ = Side::INVALID;
-        // The client's TSC just before it writes the request: the order server sorts by it in the
-        // request queue. The engine doesn't use it.
-        uint64_t send_tsc_ = 0;
         auto toString() const noexcept{
             std::stringstream ss;
             ss << "MEClientRequest";
@@ -50,19 +47,21 @@ namespace Exchange{
             ss << " price: " << priceToString(price_);
             ss << " quantity: " << qtyToString(qty_);
             ss << " side: " << sideToString(side_);
-            ss << " send_tsc: " << send_tsc_;
             ss << "]";
             return ss.str();
         }
     };
     struct OMClientRequest {
         size_t seq_num_ = 0;
+        // The client's TSC just before it writes the request: the order server sorts by it.
+        uint64_t send_tsc_ = 0;
         MEClientRequest me_client_request_;
         auto toString() const {
         std::stringstream ss;
         ss << "OMClientRequest"
             << " ["
             << "seq:" << seq_num_
+            << " send_tsc:" << send_tsc_
             << " " << me_client_request_.toString()
             << "]";
         return ss.str();
