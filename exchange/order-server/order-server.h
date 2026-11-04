@@ -71,7 +71,8 @@ namespace Exchange{
         // Shared memory in place of TCP (the TCP version is on main).
         // std::array<TCPSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
         // TCPServer tcp_server_;
-        std::array<ShmSocket*,ME_MAX_NUM_CLIENTS> client_to_port_;
+        // Each client's slot, NO_SLOT until its first request.
+        std::array<Slot,ME_MAX_NUM_CLIENTS> client_to_port_;
         ShmServer server_;
         // Requests go straight into the request queue and are sorted there 
         // This pass's requests, in the request queue's slots after the published ones: batch_ is
@@ -87,25 +88,25 @@ namespace Exchange{
         // again.
         size_t free_slots_ = 0;
 
-        // One request, read from the socket's ring. False if the request queue has no room for
+        // One request, read from the slot's ring. False if the request queue has no room for
         // it: it stays in the ring. No rx_time as with TCP: each request carries its client's
         // send_tsc_.
-        auto recvCallback(ShmSocket *socket, const OMClientRequest& request) noexcept -> bool {
+        auto recvCallback(Slot slot, const OMClientRequest& request) noexcept -> bool {
             // logger_.log("%:% %() % Received socket:% len:% rx:%\n", __FILE__,
             // __LINE__, __FUNCTION__, Common::getCurrentTimeStr(&time_str_),
             //             socket->fd_, socket->next_rcv_valid_index_, rx_time);
 
             // Check if this is the first request from this client.
             if (UNLIKELY(client_to_port_[request.me_client_request_.client_id_]
-                == nullptr)) {
-                    client_to_port_[request.me_client_request_.client_id_] = socket;
-                    // The client's socket: T6 is logged per socket send, by fd.
-                    TRACE(T6fd, (request.me_client_request_.client_id_ << 32) | static_cast<uint64_t>(socket->fd_), logger_);
+                == NO_SLOT)) {
+                    client_to_port_[request.me_client_request_.client_id_] = slot;
+                    // The client's slot: T6 is logged per send, by slot as by a socket's fd.
+                    TRACE(T6fd, (request.me_client_request_.client_id_ << 32) | slot, logger_);
                 }
-            // Client is connected to another socket.
+            // Client is connected to another slot.
             // ToDo
             // Turn this into assert.
-            else if(client_to_port_[request.me_client_request_.client_id_]  != socket){
+            else if(client_to_port_[request.me_client_request_.client_id_]  != slot){
                     return true;
             }
             // Wrong sequence number. skip.
