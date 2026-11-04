@@ -65,11 +65,18 @@ namespace Exchange{
         std::function<void()> recv_finished_callback_;
         Logger& logger_;
         std::string time_str_;
-        std::unique_ptr<SharedRegion<OrderChannels>> channels_;
+        std::unique_ptr<SharedRegion<OrderChannels>> region_;
+        // The region's OrderChannels in this process, as the socket kept it: one load per use,
+        // not region_'s pointer and then its base address.
+        OrderChannels* channels_ = nullptr;
         // The last changes_ seen: the slots' states are rescanned when it moves.
         uint32_t seen_changes_ = 0;
-        // One byte per slot, the pass and the sends check it.
+        // One byte per slot, the sends check it.
         std::array<SlotState, ME_MAX_NUM_CLIENTS> slots_{};
+        // The CONNECTED slots in slot order, the only ones the pass looks at. Rebuilt from slots_
+        // when a slot becomes CONNECTED or stops being it.
+        std::array<Slot, ME_MAX_NUM_CLIENTS> connected_{};
+        size_t connected_count_ = 0;
         // The pass's phase 1 lists the clients that wrote something, phase 2 reads them.
         struct ToRead{
             size_t slot_;
@@ -86,5 +93,6 @@ namespace Exchange{
         auto receive(Slot slot, size_t read, size_t written) noexcept -> bool;
         // A CONNECTED slot becomes state (DROPPED or CLOSED), the next poll() drops it.
         auto markDisconnected(Slot slot, SlotState state) noexcept -> void;
+        auto rebuildConnected() noexcept -> void;
     };
 }

@@ -5,9 +5,8 @@
 namespace Exchange{
     auto ShmServer::send(Slot slot, const void* data, size_t len) noexcept -> void {
         if (UNLIKELY(slots_[slot] != SlotState::CONNECTED)) return;
-        auto& channels = *channels_->get();
         const auto send_start = Common::rdtsc();
-        const auto sent = ResponseRing::write(channels.response_counters_[slot], channels.response_buffers_[slot],
+        const auto sent = ResponseRing::write(channels_->response_counters_[slot], channels_->response_buffers_[slot],
             data, len);
         // The client doesn't read what it's sent: drop it rather than lose data or stall everyone.
         // A part that fit stays unread, the client reads whole responses only.
@@ -22,8 +21,7 @@ namespace Exchange{
     }
 
     auto ShmServer::receive(Slot slot, size_t read, size_t written) noexcept -> bool {
-        auto& channels = *channels_->get();
-        const auto& buffer = channels.request_buffers_[slot];
+        const auto& buffer = channels_->request_buffers_[slot];
         // One request at a time, copied out whole: it can wrap around the ring's end.
         OMClientRequest request;
         auto next = read;
@@ -35,18 +33,19 @@ namespace Exchange{
             }
             next += sizeof(request);
         }
-        if (next != read) channels.request_counters_[slot].next_to_read_.store(next, std::memory_order_release);
+        if (next != read) channels_->request_counters_[slot].next_to_read_.store(next, std::memory_order_release);
         return taken;
     }
 
     auto ShmServer::listen() -> void {
-        channels_ = std::make_unique<SharedRegion<OrderChannels>>(ORDER_CHANNELS_NAME, SharedRegion<OrderChannels>::Open::CREATE);
+        region_ = std::make_unique<SharedRegion<OrderChannels>>(ORDER_CHANNELS_NAME, SharedRegion<OrderChannels>::Open::CREATE);
+        channels_ = region_->get();
         logger_.log("%:% %() % shared memory % ready for % clients\n", __FILE__, __LINE__, __FUNCTION__,
             Common::getCurrentTimeStr(&time_str_), ORDER_CHANNELS_NAME, ME_MAX_NUM_CLIENTS);
     }
 
     auto ShmServer::poll() noexcept -> void {
-        auto& states = channels_->get()->states_;
+        auto& states = channels_->states_;
         for (const auto slot : disconnected_) {
             disconnect_callback_(slot);
             // The slot isn't reused in this run: it stays CLOSED with its rings as they are, a new
@@ -58,9 +57,10 @@ namespace Exchange{
         }
         disconnected_.clear();
         // Clients count every CONNECTED and CLOSED: nothing to rescan until it moves.
-        const auto changes = channels_->get()->changes_.load(std::memory_order_acquire);
+        const auto changes = channels_->changes_.load(std::memory_order_acquire);
         if (LIKELY(changes == seen_changes_)) return;
         seen_changes_ = changes;
+        auto accepted = false;
         for (Slot slot = 0; slot < states.size(); ++slot) {
             const auto state = states[slot].state_.load(std::memory_order_acquire);
             // ToDo - performance
@@ -68,25 +68,26 @@ namespace Exchange{
             if (state == ClientState::CONNECTED && slots_[slot] == SlotState::NONE) {
                 // Picked up like a TCP accept.
                 slots_[slot] = SlotState::CONNECTED;
+                accepted = true;
                 logger_.log("%:% %() % client connected slot:%\n", __FILE__, __LINE__, __FUNCTION__,
                     Common::getCurrentTimeStr(&time_str_), slot);
             } else if (state == ClientState::CLOSED) {
                 markDisconnected(slot, SlotState::CLOSED);
             }
         }
+        if (accepted) rebuildConnected();
     }
 
     auto ShmServer::sendAndRecv() noexcept -> void {
         // When this pass started: P1 for the analysis, logged only for passes that read something.
         const auto pass_start = Common::rdtsc();
-        // Phase 1: which clients have a whole request to read. Only CONNECTED slots, then only the
-        // request counters, back to back: a client with nothing new costs two loads, a slot that
-        // isn't CONNECTED (not picked up by poll() yet, or to be dropped) one byte. No slot changes
-        // state during a pass, sends drop clients only after it.
-        const auto& counters = channels_->get()->request_counters_;
+        // Phase 1: which clients have a whole request to read. Only the CONNECTED slots' request
+        // counters, in slot order: a client with nothing new costs two loads, a slot without one
+        // nothing. No slot changes state during a pass, sends drop clients only after it.
+        const auto& counters = channels_->request_counters_;
         size_t to_read = 0;
-        for (Slot slot = 0; slot < counters.size(); ++slot) {
-            if (slots_[slot] != SlotState::CONNECTED) continue;
+        for (size_t i = 0; i < connected_count_; ++i) {
+            const auto slot = connected_[i];
             const auto written = counters[slot].next_to_write_.load(std::memory_order_acquire);
             // Only we store it.
             const auto read = counters[slot].next_to_read_.load(std::memory_order_relaxed);
@@ -111,5 +112,13 @@ namespace Exchange{
         if (slots_[slot] != SlotState::CONNECTED) return;
         slots_[slot] = state;
         disconnected_.push_back(slot);
+        // Out of the pass from now on.
+        rebuildConnected();
+    }
+
+    auto ShmServer::rebuildConnected() noexcept -> void {
+        connected_count_ = 0;
+        for (Slot slot = 0; slot < slots_.size(); ++slot)
+            if (slots_[slot] == SlotState::CONNECTED) connected_[connected_count_++] = slot;
     }
 }
