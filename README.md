@@ -30,20 +30,19 @@ flowchart LR
 
 ## Result
 
-End to end, a request gets its final response in 1.0 µs at p50, 1.6 µs at p99 and 1.9 µs at p99.9, at 100,000 requests/s from 255 clients. The slowest of the 900,000 measured took 2.6 µs. Inside the matching engine alone, a request takes 90 ns at p50 and 288 ns at p99.
+Wire to wire, the exchange answers a request in 0.66 µs at p50, 1.11 µs at p99 and 1.30 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 90 ns at p50 and 288 ns at p99.
 
-### Exchange, end to end
+### Exchange, wire to wire
 
-Microseconds, measured by the client, from a request going into its client's shared-memory ring to:
+Microseconds, from a request being in its client's request ring in shared memory to its final response being in the client's response ring:
 
-| Until | p50 | p90 | p99 | p99.9 | max |
+| mean | p50 | p90 | p99 | p99.9 | max |
 | --- | --- | --- | --- | --- | --- |
-| its final response | 1.0 | 1.3 | 1.6 | 1.9 | 2.6 |
-| the market update it caused (ADD or CANCEL) | 0.9 | 1.1 | 1.4 | 1.6 | 2.2 |
+| 0.69 | 0.66 | 0.87 | 1.11 | 1.30 | 1.70 |
 
 - **Workload:** 255 clients, each with its own slot in the order server's shared memory. 1,000,000 requests sent open loop at 100,000 a second for 10 s: request i is due at start + i / rate, whether or not earlier ones were answered. A client cancels each of its orders after 50 more of its own requests. Prices uniform in 1-256, quantities 1-1000, seed 42. The first 10% of requests are not measured.
 - **Completeness:** all 1,000,000 requests answered, no sequence gaps, no lost market updates.
-- **The exchange's part:** from a request being in its ring to its final response being in the client's ring, 0.66 µs at p50, 1.11 at p99, 1.30 at p99.9 and 1.70 at most (see Measuring). The rest of the end-to-end time is the client writing its request and reading its response.
+- **Seen by the client:** with its own write of the request and read of the response, the client gets the final response in 1.0 µs at p50, 1.6 at p99, 1.9 at p99.9 and 2.6 at most, and the market update the request caused (ADD or CANCEL) in 0.9, 1.4, 1.6 and 2.2 µs.
 - **Setup:** client and exchange are separate processes on one machine, connected through shared memory, so no system call or network is in the path. Matching engine, order server, market data publisher and snapshot synthesizer each on an isolated core. The client's sender, response reader and market data reader on three more.
 
 ### Matching engine alone
@@ -67,8 +66,8 @@ Nanoseconds per request, from reading it off the request queue to having written
 
 **Exchange benchmark**
 
-- The client measures latency in its own process with one clock: from a request going into its client's ring to its final response, or to the market update it caused.
-- `scripts/trace-analysis.py` measures the exchange's part of each request. The client notes when a request is in its ring, written to a file after the run. The order server logs a TSC timestamp when the final response is in the client's ring (`TRACE` in `common/perf-utils.h`, written by its async logger). The script joins the two by request and prints the mean and percentiles. The run script prints it after every run and records it in `results-exchange.csv`. The trace points between the two, one per stage of a request's path, are commented out: each cost the hot path a log line.
+- **Wire to wire:** `scripts/trace-analysis.py` measures the exchange's part of each request. The client notes when a request is in its ring, written to a file after the run. The order server logs a TSC timestamp when the final response is in the client's ring (`TRACE` in `common/perf-utils.h`, written by its async logger). The script joins the two by request and prints the mean and percentiles. The run script prints it after every run and records it in `results-exchange.csv`. These numbers are from the `shm-exchange-part` branch, where the trace points between the two are commented out: each cost the hot path a log line. The `shm-transport` branch keeps them, one per stage of a request's path, for a per-stage breakdown that includes their cost.
+- **Seen by the client:** the client measures latency in its own process with one clock: from a request going into its client's ring to its final response, or to the market update it caused.
 
 **Both** run scripts rebuild, run with a fixed memory layout, and append a row to their `results.csv` with the commit and a fingerprint of any uncommitted changes, so every recorded number can be traced to the code that produced it. The exchange benchmark's run script also appends the exchange's part to `results-exchange.csv`, with the same date and commit.
 
