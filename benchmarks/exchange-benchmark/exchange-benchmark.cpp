@@ -18,7 +18,6 @@
 #include <cctype>
 #include <chrono>
 #include <cstring>
-#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -39,9 +38,9 @@ namespace {
     size_t clients = 255;           // client ids 1..clients, one TCP connection each.
     size_t rate = 100'000;          // requests per second, all clients together.
     size_t seconds = 10;
-    // A client cancels each of its orders after this many more of its own requests. An order filled
-    // by then gets CANCEL_REJECTED. Resting orders stay below clients * order_lifetime.
-    size_t order_lifetime = 50;
+    // Percent of requests that cancel a random earlier order, which may be filled already
+    // (CANCEL_REJECTED). The rest are NEW orders. As in the matching engine benchmark.
+    unsigned cancel_pct = 25;
     // NEW order prices are uniform in [price_min, price_max], quantities in [1, qty_max].
     Price price_min = 1;
     Price price_max = ME_MAX_PRICE_LEVELS;
@@ -53,7 +52,7 @@ namespace {
   };
 
   auto usage(const char* prog) {
-    std::cerr << "usage: " << prog << " [--clients N] [--rate N] [--seconds N] [--order-lifetime N]\n"
+    std::cerr << "usage: " << prog << " [--clients N] [--rate N] [--seconds N] [--cancel-pct N]\n"
               << "       [--price-min N] [--price-max N] [--qty-max N] [--seed N]\n"
               << "       [--sender-core N] [--receiver-core N] [--md-core N]\n"
               << "clients are 1-" << ME_MAX_NUM_CLIENTS - 1 << ", prices in [1, " << ME_MAX_PRICE_LEVELS
@@ -70,7 +69,7 @@ namespace {
       if (!std::strcmp(key, "--clients")) cfg.clients = static_cast<size_t>(value);
       else if (!std::strcmp(key, "--rate")) cfg.rate = static_cast<size_t>(value);
       else if (!std::strcmp(key, "--seconds")) cfg.seconds = static_cast<size_t>(value);
-      else if (!std::strcmp(key, "--order-lifetime")) cfg.order_lifetime = static_cast<size_t>(value);
+      else if (!std::strcmp(key, "--cancel-pct")) cfg.cancel_pct = static_cast<unsigned>(value);
       else if (!std::strcmp(key, "--price-min")) cfg.price_min = static_cast<Price>(value);
       else if (!std::strcmp(key, "--price-max")) cfg.price_max = static_cast<Price>(value);
       else if (!std::strcmp(key, "--qty-max")) cfg.qty_max = static_cast<Qty>(value);
@@ -81,7 +80,7 @@ namespace {
       else usage(argv[0]);
     }
     if (cfg.clients == 0 || cfg.clients >= ME_MAX_NUM_CLIENTS || cfg.rate == 0 || cfg.seconds == 0) usage(argv[0]);
-    if (cfg.order_lifetime == 0 || cfg.qty_max == 0) usage(argv[0]);
+    if (cfg.cancel_pct > 100 || cfg.qty_max == 0) usage(argv[0]);
     if (cfg.price_min < 1 || cfg.price_min > cfg.price_max || cfg.price_max > ME_MAX_PRICE_LEVELS) usage(argv[0]);
     return cfg;
   }
@@ -93,13 +92,13 @@ namespace {
 
   constexpr uint32_t NONE = UINT32_MAX;
 
-  // A NEW order a client will cancel when its request count reaches due.
+  // A NEW order not cancelled yet, it may be filled already.
   struct LiveOrder {
+    ClientId client_id;
     OrderId order_id;
     TickerId ticker_id;
     Side side;
     Price price;
-    size_t due;
   };
 
   // The request stream, made before the run so sending costs only the send itself.
@@ -116,19 +115,25 @@ namespace {
     r.new_index.resize(cfg.clients + 1);
     r.cancel_index.resize(cfg.clients + 1);
     std::mt19937 rng(cfg.seed);
-    std::vector<std::deque<LiveOrder>> live(cfg.clients + 1);
+    // Every client's NEW orders not cancelled yet: a CANCEL takes one out.
+    std::vector<LiveOrder> live;
+    live.reserve(n);
     std::vector<size_t> requests_of(cfg.clients + 1, 0);
     std::array<size_t, ME_MAX_TICKERS> news_of_ticker{};
     for (size_t i = 0; i < n; ++i) {
-      const ClientId c = 1 + rng() % cfg.clients;
-      auto& orders = live[c];
       MEClientRequest request;
-      if (!orders.empty() && orders.front().due <= requests_of[c]) {
-        const auto o = orders.front();
-        orders.pop_front();
-        request = {ClientRequestType::CANCEL, o.order_id, o.ticker_id, c, o.price, 0, o.side};
-        r.cancel_index[c][o.order_id] = static_cast<uint32_t>(i);
+      if (!live.empty() && rng() % 100 < cfg.cancel_pct) {
+        // A random earlier order, sent by its client. Each is cancelled at most once, unlike in the
+        // matching engine benchmark: responses and market updates are matched to their request by
+        // client, order id and whether it's a cancel, two cancels of one order would look the same.
+        const auto k = rng() % live.size();
+        const auto o = live[k];
+        live[k] = live.back();
+        live.pop_back();
+        request = {ClientRequestType::CANCEL, o.order_id, o.ticker_id, o.client_id, o.price, 0, o.side};
+        r.cancel_index[o.client_id][o.order_id] = static_cast<uint32_t>(i);
       } else {
+        const ClientId c = 1 + rng() % cfg.clients;
         const OrderId order_id = r.new_index[c].size();
         if (UNLIKELY(order_id >= ME_MAX_ORDER_PER_CLIENT)) FATAL("Out of client order ids, use more --clients or a shorter run.");
         const TickerId ticker_id = rng() % ME_MAX_TICKERS;
@@ -138,10 +143,12 @@ namespace {
         const Qty qty = 1 + rng() % cfg.qty_max;
         const Side side = (rng() % 2) ? Side::BUY : Side::SELL;
         request = {ClientRequestType::NEW, order_id, ticker_id, c, price, qty, side};
-        orders.push_back({order_id, ticker_id, side, price, requests_of[c] + cfg.order_lifetime});
+        live.push_back({c, order_id, ticker_id, side, price});
         r.new_index[c].push_back(static_cast<uint32_t>(i));
         r.cancel_index[c].push_back(NONE);
       }
+      // Per client: the order server checks each client's sequence numbers.
+      const ClientId c = request.client_id_;
       ++requests_of[c];
       r.stream.push_back({requests_of[c], 0, request});  // seq numbers start at 1. send_tsc_ is 0 here.
     }
@@ -261,8 +268,8 @@ namespace {
 
 int main(int argc, char** argv) {
   const auto cfg = parseArgs(argc, argv);
-  printf("clients:%zu rate:%zu/s seconds:%zu order_lifetime:%zu price:%lu-%lu qty:1-%lu seed:%u cores sender:%d receiver:%d md:%d\n",
-         cfg.clients, cfg.rate, cfg.seconds, cfg.order_lifetime, cfg.price_min, cfg.price_max, cfg.qty_max, cfg.seed,
+  printf("clients:%zu rate:%zu/s seconds:%zu cancel_pct:%u price:%lu-%lu qty:1-%lu seed:%u cores sender:%d receiver:%d md:%d\n",
+         cfg.clients, cfg.rate, cfg.seconds, cfg.cancel_pct, cfg.price_min, cfg.price_max, cfg.qty_max, cfg.seed,
          cfg.sender_core, cfg.receiver_core, cfg.md_core);
   const auto requests = makeRequests(cfg);
   const size_t n = requests.stream.size();
