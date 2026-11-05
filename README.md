@@ -18,11 +18,14 @@ A simulated exchange in C++20 on Linux: a matching engine, an order server, and 
 
 ```mermaid
 flowchart LR
-    os[Order server<br/>shared-memory gateway]
-    me[Matching engine] -- Response queue --> os
-    os -- Request queue --> me
+    c[Clients] -- request rings --> os[Order server<br/>shared-memory gateway]
+    os -- response rings --> c
+    os -- Request queue --> me[Matching engine]
+    me -- Response queue --> os
     me -- Market update queue --> mdp[Market data publisher]
-    mdp -- Snapshot queue --> ss[Snapshot synthesizer<br/>UDP multicast, every 60 s]
+    mdp -- incremental ring --> c
+    mdp -- Snapshot queue --> ss[Snapshot synthesizer]
+    ss -- UDP multicast, every 60 s --> c
 ```
 
 ## Result
@@ -64,12 +67,13 @@ Nanoseconds per request, from reading it off the request queue to having written
 **Exchange benchmark**
 
 - The client measures latency in its own process with one clock: from a request going into its client's ring to its final response, or to the market update it caused.
+- `scripts/trace-analysis.py` splits each request's path into stages. Every thread on the path logs a TSC timestamp at its stage (`TRACE` in `common/perf-utils.h`, written by the thread's async logger), and the script joins them by request and prints each stage's mean and percentiles: waiting for the order server's poll, its read, each queue, the matching engine, the write back and the client's read. The run script prints it after every run, it isn't recorded.
 
 **Both** run scripts rebuild, run with a fixed memory layout, and append a row to their `results.csv` with the commit and a fingerprint of any uncommitted changes, so every recorded number can be traced to the code that produced it.
 
 ## Build and run
 
-Requires Linux (thread pinning, POSIX shared memory in `/dev/shm`, multicast on `lo` for snapshots), a C++20 compiler (builds with GCC 13), CMake 3.16+ and Python 3.
+Requires Linux (thread pinning, POSIX shared memory in `/dev/shm`, multicast on `lo` for snapshots), a C++20 compiler (built and measured with GCC 15.2), CMake 3.16+ and Python 3.
 
 ```bash
 cd exchange/matching-engine
@@ -101,6 +105,7 @@ benchmarks/matching-engine-benchmark/run-benchmark.sh --price-min 101 --price-ma
 
 - The order server drops a request that is out of sequence without a reject.
 - A client that doesn't drain its response ring is dropped, and a market data reader that falls too far behind loses whole updates, which it sees as a gap in the sequence numbers.
+- A slot isn't reused within a run: a client that disconnects can't reconnect until the exchange restarts.
 - Limit orders and cancels only. No modify, market or IOC orders.
 - No automated correctness tests yet.
 
