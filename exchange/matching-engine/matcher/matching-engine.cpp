@@ -52,15 +52,15 @@ namespace Exchange{
                 //         Common::getCurrentNanos(),
                 //         me_client_request->toString());
                 // Read from the request queue.
-                TRACE(T3, traceKey(*me_client_request), logger_);
+                // TRACE(T3, traceKey(*me_client_request), logger_);
                 processClientRequest(me_client_request);
                 // How much it produced, publishOutputs() resets the counts.
-                const auto outputs = (pending_client_responses_ << 32) | pending_market_updates_;
+                // const auto outputs = (pending_client_responses_ << 32) | pending_market_updates_;
                 publishOutputs();
                 // Its responses and market updates are in their queues.
-                TRACE(T4, traceKey(*me_client_request), logger_);
+                // TRACE(T4, traceKey(*me_client_request), logger_);
                 // Not a TSC: its number of responses (upper 32 bits) and market updates (lower 32).
-                TRACE_AT(T4n, traceKey(*me_client_request), outputs, logger_);
+                // TRACE_AT(T4n, traceKey(*me_client_request), outputs, logger_);
                 incoming_requests_->updateReadIndex();
                 } else if (stopping) {
                     return;

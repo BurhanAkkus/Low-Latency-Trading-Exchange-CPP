@@ -5,7 +5,7 @@
 namespace Exchange{
     auto ShmServer::send(Slot slot, const void* data, size_t len) noexcept -> void {
         if (UNLIKELY(slots_[slot] != SlotState::CONNECTED)) return;
-        const auto send_start = Common::rdtsc();
+        // const auto send_start = Common::rdtsc();
         const auto sent = ResponseRing::write(channels_->response_counters_[slot], channels_->response_buffers_[slot],
             data, len);
         // The client doesn't read what it's sent: drop it rather than lose data or stall everyone.
@@ -14,10 +14,11 @@ namespace Exchange{
             markDisconnected(slot, SlotState::DROPPED);
             return;
         }
-        // In the client's ring. As for TCP, by fd: the analysis takes the first write after a
-        // response's T5, S0 is when it started.
-        TRACE_AT(S0, slot, send_start, logger_);
-        TRACE(T6, slot, logger_);
+        // In the client's ring. As for TCP, by fd: the analysis took the first write after a
+        // response's T5, S0 is when it started. T6 is logged per final response now, by
+        // OrderServer::sendClientResponses.
+        // TRACE_AT(S0, slot, send_start, logger_);
+        // TRACE(T6, slot, logger_);
     }
 
     auto ShmServer::receive(Slot slot, size_t read, size_t written) noexcept -> bool {
@@ -80,7 +81,7 @@ namespace Exchange{
 
     auto ShmServer::sendAndRecv() noexcept -> void {
         // When this pass started: P1 for the analysis, logged only for passes that read something.
-        const auto pass_start = Common::rdtsc();
+        // const auto pass_start = Common::rdtsc();
         // Phase 1: which clients have a whole request to read. Only the CONNECTED slots' request
         // counters, in slot order: a client with nothing new costs two loads, a slot without one
         // nothing. No slot changes state during a pass, sends drop clients only after it.
@@ -102,7 +103,7 @@ namespace Exchange{
             if (UNLIKELY(!receive(slot, read, written))) break;
         }
         if (received) {
-            TRACE_AT(P1, received, pass_start, logger_);
+            // TRACE_AT(P1, received, pass_start, logger_);
             recv_finished_callback_();
         }
     }

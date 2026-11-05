@@ -39,12 +39,16 @@ namespace Exchange{
             const auto slot = client_to_port_[client_response->client_id_];
             if(UNLIKELY(slot == NO_SLOT)){continue;}
             // Final responses only: a fill isn't the end of a request.
-            if (client_response->type_ != ClientResponseType::FILLED)
-                TRACE(T5, traceKey(*client_response), logger_);
+            // if (client_response->type_ != ClientResponseType::FILLED)
+            //     TRACE(T5, traceKey(*client_response), logger_);
             auto &next_outgoing_seq_num = cid_next_outgoing_seq_num_[client_response->client_id_];
             // The sequence number and the response in one write.
             const OMClientResponse response{next_outgoing_seq_num, *client_response};
             server_.send(slot, &response, sizeof(response));
+            // A request's final response is in its client's ring: the end of the exchange's part,
+            // from the benchmark's C1. A fill isn't the end of a request.
+            if (client_response->type_ != ClientResponseType::FILLED)
+                TRACE(T6, traceKey(*client_response), logger_);
             ++next_outgoing_seq_num;
             }
     }

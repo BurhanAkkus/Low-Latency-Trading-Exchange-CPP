@@ -15,8 +15,8 @@
 # and market updates/s, and p50 p90 p99 p99.9 max in us of request -> final response, of
 # request -> ADD / CANCEL update and of the sender's schedule lag, then the thermal throttle events
 # during the measurement (package, physical cores; not zero: not comparable). Latencies leave out
-# the first 10% of requests. After the row, scripts/trace-analysis.py prints each stage of a request's path
-# through the exchange (not recorded).
+# the first 10% of requests. After the row, scripts/trace-analysis.py prints the exchange's part of
+# each request, from its request in its ring to its final response in the client's ring (not recorded).
 #
 # Usage:   run-exchange-benchmark.sh [benchmark options]
 #          run-exchange-benchmark.sh --rate 200000 --clients 64
@@ -115,6 +115,6 @@ fi
 echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$result" >> "$RESULTS"
 echo "recorded in $RESULTS"
 
-# Where requests spend their time, from the exchange's TRACE lines and the benchmark's
+# The exchange's part of each request, from the order server's T6 lines and the benchmark's
 # benchmark_trace.log, complete once the exchange has stopped. Printed only, not recorded.
 python3 "$REPO/scripts/trace-analysis.py" || true
