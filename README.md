@@ -30,7 +30,7 @@ flowchart LR
 
 ## Result
 
-Wire to wire, the exchange answers a request in 0.66 µs at p50, 1.11 µs at p99 and 1.30 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 90 ns at p50 and 288 ns at p99.
+Wire to wire, the exchange answers a request in 0.72 µs at p50, 1.16 µs at p99 and 1.33 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 90 ns at p50 and 288 ns at p99.
 
 ### Exchange, wire to wire
 
@@ -38,9 +38,9 @@ Microseconds, from a request being in its client's request ring in shared memory
 
 | mean | p50 | p90 | p99 | p99.9 |
 | --- | --- | --- | --- | --- |
-| 0.69 | 0.66 | 0.87 | 1.11 | 1.30 |
+| 0.74 | 0.72 | 0.94 | 1.16 | 1.33 |
 
-- **Workload:** 255 clients, each with its own slot in the order server's shared memory. 1,000,000 requests sent open loop at 100,000 a second for 10 s: request i is due at start + i / rate, whether or not earlier ones were answered. A client cancels each of its orders after 50 more of its own requests. Prices uniform in 1-256, quantities 1-1000, seed 42. The first 10% of requests are not measured.
+- **Workload:** 255 clients, each with its own slot in the order server's shared memory. 1,000,000 requests sent open loop at 100,000 a second for 10 s: request i is due at start + i / rate, whether or not earlier ones were answered. About 25% of requests cancel a random earlier order, which has often been filled already, the rest are new limit orders. Prices uniform in 1-256, quantities 1-1000, seed 42. The first 10% of requests are not measured.
 - **Completeness:** all 1,000,000 requests answered, no sequence gaps, no lost market updates.
 - **Setup:** client and exchange are separate processes on one machine, connected through shared memory, so no system call or network is in the path. Matching engine, order server, market data publisher and snapshot synthesizer each on an isolated core. The client's sender, response reader and market data reader on three more.
 
