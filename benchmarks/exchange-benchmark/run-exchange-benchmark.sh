@@ -13,8 +13,9 @@
 # a fingerprint of them (runs with the same fingerprint ran the same code), the benchmark options,
 # the send rate, answered requests, seq gaps (the tcp_gaps column), lost market updates, the exchange's requests/s
 # and market updates/s, and p50 p90 p99 p99.9 max in us of request -> final response, of
-# request -> ADD / CANCEL update and of the sender's schedule lag. Latencies leave out the first
-# 10% of requests. After the row, scripts/trace-analysis.py prints each stage of a request's path
+# request -> ADD / CANCEL update and of the sender's schedule lag, then the thermal throttle events
+# during the measurement (package, physical cores; not zero: not comparable). Latencies leave out
+# the first 10% of requests. After the row, scripts/trace-analysis.py prints each stage of a request's path
 # through the exchange (not recorded).
 #
 # Usage:   run-exchange-benchmark.sh [benchmark options]
@@ -109,7 +110,7 @@ if [[ ! -f $RESULTS ]]; then
     for m in response md lag; do
         for p in p50 p90 p99 p99.9 max; do latency+=",${m}_$p"; done
     done
-    echo "date,commit,dirty,changes,options,sent_per_s,answered,tcp_gaps,md_lost,requests_per_s,md_updates_per_s$latency" > "$RESULTS"
+    echo "date,commit,dirty,changes,options,sent_per_s,answered,tcp_gaps,md_lost,requests_per_s,md_updates_per_s$latency,throttle_package,throttle_cores" > "$RESULTS"
 fi
 echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$result" >> "$RESULTS"
 echo "recorded in $RESULTS"

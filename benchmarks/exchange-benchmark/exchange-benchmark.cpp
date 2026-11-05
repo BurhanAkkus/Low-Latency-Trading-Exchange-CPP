@@ -15,9 +15,12 @@
 #include "exchange/order-server/order-channels.h"
 // #include <sys/epoll.h>
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstring>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <unordered_map>
@@ -172,6 +175,35 @@ namespace {
   // A full ring means the order server reads slower than we send, keep trying.
   auto writeAll(RingCounters& counters, RingBuffer<ORDER_RING_SIZE>& buffer, const void* data, size_t len) noexcept {
     for (size_t off = 0; off < len;) off += RequestRing::write(counters, buffer, static_cast<const char*>(data) + off, len - off);
+  }
+
+  // Thermal throttling as the kernel counts it (/sys/devices/system/cpu/cpuN/thermal_throttle): the
+  // package's events, and every physical core's summed. -1 where the kernel doesn't count them.
+  struct Throttles {
+    long package = -1;
+    long cores = -1;
+  };
+  auto readCount(const std::filesystem::path& path) -> long {
+    std::ifstream f(path);
+    long v = -1;
+    return (f >> v) ? v : -1;
+  }
+  auto readThrottles() -> Throttles {
+    namespace fs = std::filesystem;
+    const fs::path base = "/sys/devices/system/cpu";
+    Throttles t;
+    t.package = readCount(base / "cpu0/thermal_throttle/package_throttle_count");
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(base, ec)) {
+      const auto name = e.path().filename().string();
+      if (name.size() < 4 || name.compare(0, 3, "cpu") != 0 || !std::isdigit(static_cast<unsigned char>(name[3]))) continue;
+      // A core's two hyperthreads report the same counter: only its first CPU counts it.
+      std::ifstream siblings(e.path() / "topology/core_cpus_list");
+      long first = -1;
+      if (!(siblings >> first) || "cpu" + std::to_string(first) != name) continue;
+      if (const auto c = readCount(e.path() / "thermal_throttle/core_throttle_count"); c >= 0) t.cores = std::max(t.cores, 0L) + c;
+    }
+    return t;
   }
 
   // A final response to a request: NEW gets ACCEPTED or REJECTED, CANCEL gets CANCELED or CANCEL_REJECTED.
@@ -339,6 +371,9 @@ int main(int argc, char** argv) {
   std::vector<uint64_t> sent_tsc(n), sent_end_tsc(n);
   const int64_t start = now() + 100'000'000;  // the other threads are running by then.
   auto due = [&](size_t i) { return start + static_cast<int64_t>(i * 1e9 / cfg.rate); };
+  // Thermal throttling during the measurement, from before the first request to the last answer:
+  // the exchange's startup throttles, a clean measurement doesn't.
+  const auto throttles_before = readThrottles();
   auto sender_thread = createAndStartThread(cfg.sender_core, "Benchmark/Sender", [&]() {
     for (size_t i = 0; i < n; ++i) {
       const auto at = due(i);
@@ -361,6 +396,7 @@ int main(int argc, char** argv) {
   // Wait for the last answers, then a little longer for the market data.
   const auto sent_end = now();
   while (finals.load(std::memory_order_relaxed) < n && now() - sent_end < 5'000'000'000) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  const auto throttles_after = readThrottles();
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   run = false;
   receiver_thread->join();
@@ -398,12 +434,19 @@ int main(int argc, char** argv) {
   printPercentiles("request -> final response", response_p, response_latency.size());
   printPercentiles("request -> ADD / CANCEL update", md_p, md_latency.size());
   printPercentiles("schedule lag (sender behind)", lag_p, lag.size());
-  // For run-exchange-benchmark.sh: rates and counts, then p50 p90 p99 p99.9 max of each latency.
+  const auto during = [](long before, long after) { return before < 0 || after < 0 ? -1L : after - before; };
+  const auto package_throttles = during(throttles_before.package, throttles_after.package);
+  const auto core_throttles = during(throttles_before.cores, throttles_after.cores);
+  printf("thermal throttling during the measurement: package %ld, cores %ld (-1: not counted)\n", package_throttles, core_throttles);
+  if (package_throttles > 0 || core_throttles > 0)
+    fprintf(stderr, "WARNING: the CPU throttled during the measurement, its latencies aren't comparable with a run that didn't\n");
+  // For run-exchange-benchmark.sh: rates and counts, then p50 p90 p99 p99.9 max of each latency,
+  // then the throttling during the measurement.
   printf("csv:%.0f,%zu,%zu,%zu,%.0f,%.0f", n / send_secs, responses.size(), seq_gaps, md_lost,
          responses.size() / run_secs, md_updates / run_secs);
   for (const auto& p : {response_p, md_p, lag_p})
     for (const auto x : p) printf(",%.1f", x);
-  printf("\n");
+  printf(",%ld,%ld\n", package_throttles, core_throttles);
 
   // This side's stages of every request for scripts/trace-analysis.py, like the exchange's TRACE
   // lines: C0 sent, C1 its send() returned, C7 final response, C7m the ADD / CANCEL update, LINK

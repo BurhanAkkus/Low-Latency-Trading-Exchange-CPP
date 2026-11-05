@@ -14,11 +14,18 @@
 #include <unistd.h>
 
 namespace Common{
-    // A named POSIX shared memory region (/dev/shm/<name>) holding one T, shared by two processes
-    // on one machine. The creator (the exchange) makes it, zeroes it, constructs T in it and marks
-    // it ready. The other process (the benchmark) attaches by name and waits until it's ready.
-    // T has to work from both processes: no pointers inside it, its atomics lock-free.
-    // Both mappings are populated up front: neither process takes a page fault on it later.
+    // Where the regions are: hugetlbfs, so they're on 2 MB pages. benchmarks/prepare-machine.sh
+    // reserves the pages and makes the directory, after every boot.
+    inline constexpr const char* SHARED_REGION_DIR = "/dev/hugepages/exchange";
+    constexpr size_t HUGE_PAGE_SIZE = 2 * 1024 * 1024;
+
+    // A named shared memory region (SHARED_REGION_DIR/<name>) holding one T, shared by two
+    // processes on one machine. The creator (the exchange) makes it, zeroes it, constructs T in it
+    // and marks it ready. The other process (the benchmark) attaches by name and waits until it's
+    // ready. T has to work from both processes: no pointers inside it, its atomics lock-free.
+    // Both mappings are populated up front: neither process takes a page fault on it later. On
+    // 2 MB pages: the order server's 255 clients' rings are 16 pages instead of ~8000, their
+    // address translations stay in the TLB.
     template<typename T>
     class SharedRegion final{
         // In front of T, checked by the attaching process.
@@ -34,9 +41,11 @@ namespace Common{
         static constexpr uint64_t MAGIC = 0x314e474552534853; // "SHSREGN1"
         // T after the header, at T's alignment.
         static constexpr size_t OFFSET = (sizeof(Header) + alignof(T) - 1) / alignof(T) * alignof(T);
-        static constexpr size_t BYTES = OFFSET + sizeof(T);
+        // Whole huge pages: hugetlbfs maps and unmaps nothing smaller.
+        static constexpr size_t BYTES = (OFFSET + sizeof(T) + HUGE_PAGE_SIZE - 1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE;
 
         std::string name_;
+        std::string path_;
         void* base_ = nullptr;
         bool creator_ = false;
 
@@ -44,20 +53,25 @@ namespace Common{
         auto map(int fd) -> void {
             base_ = mmap(nullptr, BYTES, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd, 0);
             close(fd);
-            ASSERT(base_ != MAP_FAILED, "mmap of " + name_ + " failed: " + std::string(std::strerror(errno)));
+            // ENOMEM: fewer huge pages free than the region needs.
+            ASSERT(base_ != MAP_FAILED, "mmap of " + path_ + " failed: " + std::string(std::strerror(errno)) +
+                ", are the huge pages reserved? sudo benchmarks/prepare-machine.sh");
         }
         public:
         enum class Open{CREATE, ATTACH};
 
         // CREATE: a new region, one left behind under the same name is removed first.
         // ATTACH: waits up to timeout for the creator to make the region and mark it ready.
+        // name starts with a '/'.
         SharedRegion(const std::string& name, Open open,
-            std::chrono::milliseconds timeout = std::chrono::seconds(60)) : name_(name), creator_(open == Open::CREATE) {
+            std::chrono::milliseconds timeout = std::chrono::seconds(60))
+            : name_(name), path_(SHARED_REGION_DIR + name), creator_(open == Open::CREATE) {
             if (creator_) {
-                shm_unlink(name_.c_str());
-                const int fd = shm_open(name_.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
-                ASSERT(fd >= 0, "shm_open of " + name_ + " failed: " + std::string(std::strerror(errno)));
-                ASSERT(ftruncate(fd, BYTES) == 0, "ftruncate of " + name_ + " failed: " + std::string(std::strerror(errno)));
+                unlink(path_.c_str());
+                const int fd = ::open(path_.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
+                ASSERT(fd >= 0, "open of " + path_ + " failed: " + std::string(std::strerror(errno)) +
+                    ", run sudo benchmarks/prepare-machine.sh");
+                ASSERT(ftruncate(fd, BYTES) == 0, "ftruncate of " + path_ + " failed: " + std::string(std::strerror(errno)));
                 map(fd);
                 // Every page written once, so they're allocated now and not on first use.
                 memset(base_, 0, BYTES);
@@ -76,10 +90,10 @@ namespace Common{
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             };
             while (true) {
-                const int fd = shm_open(name_.c_str(), O_RDWR, 0);
+                const int fd = ::open(path_.c_str(), O_RDWR);
                 if (fd < 0) { wait("no such region, is the exchange running?"); continue; }
                 struct stat st{};
-                // Not sized yet: the creator is between shm_open and ftruncate.
+                // Not sized yet: the creator is between open and ftruncate.
                 if (fstat(fd, &st) != 0 || static_cast<size_t>(st.st_size) < BYTES) { close(fd); wait("region too small"); continue; }
                 map(fd);
                 auto h = header();
@@ -94,7 +108,7 @@ namespace Common{
         }
         ~SharedRegion() {
             if (base_) munmap(base_, BYTES);
-            if (creator_) shm_unlink(name_.c_str());
+            if (creator_) unlink(path_.c_str());
         }
 
         // Delete defaults.

@@ -55,7 +55,7 @@ Nanoseconds per request, from reading it off the request queue to having written
 
 - **Workload:** 500,000 requests sent back to back, the first 50,000 skipped as warm-up. 8 instruments, 16 clients, prices 1-256, quantities 1-100, 25% cancels, seed 42. Stand-ins for the order server and market data publisher read the output queues, with a 16 µs busy wait per loop for their syscalls.
 
-**Machine:** Intel i7-14650HX laptop, Ubuntu 26.04.1, CMake Release build (-O3), 2 MB pages, no address randomisation. CPUs isolated with `isolcpus`, `nohz_full`, `rcu_nocbs`, `irqaffinity` and `nmi_watchdog=0`: CPUs 2-15 for the exchange run.
+**Machine:** Intel i7-14650HX laptop, Ubuntu 26.04.1, CMake Release build (-O3), 2 MB pages for the shared memory and large heap allocations, no address randomisation. CPUs isolated with `isolcpus`, `nohz_full`, `rcu_nocbs`, `irqaffinity` and `nmi_watchdog=0`: CPUs 2-15 for the exchange run.
 
 ## Measuring
 
@@ -73,7 +73,7 @@ Nanoseconds per request, from reading it off the request queue to having written
 
 ## Build and run
 
-Requires Linux (thread pinning, POSIX shared memory in `/dev/shm`, multicast on `lo` for snapshots), a C++20 compiler (built and measured with GCC 15.2), CMake 3.16+ and Python 3.
+Requires Linux (thread pinning, 2 MB huge pages through hugetlbfs at `/dev/hugepages` for the shared memory, multicast on `lo` for snapshots), a C++20 compiler (built and measured with GCC 15.2), CMake 3.16+ and Python 3.
 
 ```bash
 cd exchange/matching-engine
@@ -84,7 +84,7 @@ cmake --build cmake-build-release -j   # exchange, exchange_benchmark, matching_
 From the repo root, once per boot:
 
 ```bash
-sudo benchmarks/prepare-machine.sh   # pins the uncore clock, keeps the CPUs that aren't isolated out of deep idle, checks the setup
+sudo benchmarks/prepare-machine.sh   # pins the uncore clock, keeps the CPUs that aren't isolated out of deep idle, reserves the shared memory's huge pages, checks the setup
 ```
 
 The whole exchange, end to end:
