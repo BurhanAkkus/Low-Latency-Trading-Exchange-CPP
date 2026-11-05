@@ -101,7 +101,7 @@ namespace Exchange{
                 == NO_SLOT)) {
                     client_to_port_[request.me_client_request_.client_id_] = slot;
                     // The client's slot: T6 is logged per send, by slot as by a socket's fd.
-                    // TRACE(T6fd, (request.me_client_request_.client_id_ << 32) | slot, logger_);
+                    TRACE(T6fd, (request.me_client_request_.client_id_ << 32) | slot, logger_);
                 }
             // Client is connected to another slot.
             // ToDo
@@ -126,7 +126,7 @@ namespace Exchange{
             --free_slots_;
             next_expected_seq_num++;
             // Read from the client's ring.
-            // TRACE(T1, traceKey(request.me_client_request_), logger_);
+            TRACE(T1, traceKey(request.me_client_request_), logger_);
             if (!pending_) {
                 batch_ = client_requests_->unpublished();
                 first_send_tsc_ = request.send_tsc_;
@@ -150,7 +150,7 @@ namespace Exchange{
             // In the request queue, the engine can read them from here on. Once per batch, by its
             // size: a request's T2 is the first one after its T1. Per request it read the slots
             // back for their keys.
-            // TRACE(T2, pending_, logger_);
+            TRACE(T2, pending_, logger_);
             pending_ = 0;
         }
         auto run() noexcept -> void;

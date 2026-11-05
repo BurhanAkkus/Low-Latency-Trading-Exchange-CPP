@@ -448,24 +448,22 @@ int main(int argc, char** argv) {
     for (const auto x : p) printf(",%.1f", x);
   printf(",%ld,%ld\n", package_throttles, core_throttles);
 
-  // This side's point of every request for scripts/trace-analysis.py, like the exchange's TRACE
-  // lines: C1, its write into its client's request ring returned, in send order. Not written any
-  // more: C0 sent, C7 final response, C7m the ADD / CANCEL update, LINK which update a request
-  // caused (from its ACCEPTED / CANCELED).
+  // This side's stages of every request for scripts/trace-analysis.py, like the exchange's TRACE
+  // lines: C0 sent, C1 its send() returned, C7 final response, C7m the ADD / CANCEL update, LINK
+  // which update a request caused (from its ACCEPTED / CANCELED). C0 is in send order.
   if (FILE* trace = fopen("benchmark_trace.log", "w")) {
     for (size_t i = 0; i < n; ++i) {
       const auto key = traceKey(requests.stream[i].me_client_request_);
-      // fprintf(trace, "C0 %lu %lu\n", key, sent_tsc[i]);
-      fprintf(trace, "C1 %lu %lu\n", key, sent_end_tsc[i]);
+      fprintf(trace, "C0 %lu %lu\nC1 %lu %lu\n", key, sent_tsc[i], key, sent_end_tsc[i]);
     }
-    // for (const auto& r : responses) {
-    //   const bool cancel = r.type == ClientResponseType::CANCELED || r.type == ClientResponseType::CANCEL_REJECTED;
-    //   const auto request = requestKey(r.client, r.client_order_id, cancel);
-    //   fprintf(trace, "C7 %lu %lu\n", request, r.tsc);
-    //   if (r.type == ClientResponseType::ACCEPTED || r.type == ClientResponseType::CANCELED)
-    //     fprintf(trace, "LINK %lu %lu\n", request, updateKey(r.ticker_id, r.market_order_id, cancel));
-    // }
-    // for (const auto& u : updates) fprintf(trace, "C7m %lu %lu\n", updateKey(u.ticker_id, u.order_id, u.type == MarketUpdateType::CANCEL), u.tsc);
+    for (const auto& r : responses) {
+      const bool cancel = r.type == ClientResponseType::CANCELED || r.type == ClientResponseType::CANCEL_REJECTED;
+      const auto request = requestKey(r.client, r.client_order_id, cancel);
+      fprintf(trace, "C7 %lu %lu\n", request, r.tsc);
+      if (r.type == ClientResponseType::ACCEPTED || r.type == ClientResponseType::CANCELED)
+        fprintf(trace, "LINK %lu %lu\n", request, updateKey(r.ticker_id, r.market_order_id, cancel));
+    }
+    for (const auto& u : updates) fprintf(trace, "C7m %lu %lu\n", updateKey(u.ticker_id, u.order_id, u.type == MarketUpdateType::CANCEL), u.tsc);
     fclose(trace);
   }
   // for (size_t c = 1; c <= cfg.clients; ++c) close(fds[c]);
