@@ -53,10 +53,14 @@ namespace Exchange{
                 //         me_client_request->toString());
                 // Read from the request queue.
                 // TRACE(T3, traceKey(*me_client_request), logger_);
+                // The engine's time for a request, for the matching engine benchmark: from reading it
+                // to its responses and market updates published. Logged after, as "ME_req <cycles>".
+                START_MEASURE(ME_req);
                 processClientRequest(me_client_request);
                 // How much it produced, publishOutputs() resets the counts.
                 // const auto outputs = (pending_client_responses_ << 32) | pending_market_updates_;
                 publishOutputs();
+                END_MEASURE(ME_req, logger_);
                 // Its responses and market updates are in their queues.
                 // TRACE(T4, traceKey(*me_client_request), logger_);
                 // Not a TSC: its number of responses (upper 32 bits) and market updates (lower 32).
