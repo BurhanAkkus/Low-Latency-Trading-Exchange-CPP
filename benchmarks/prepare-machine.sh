@@ -5,15 +5,16 @@
 # follows system activity, and with it the cost of moving a cache line between the engine and the
 # threads reading its queues. Keeps the CPUs that aren't isolated out of the deep idle states and
 # turns off C1E promotion (both below). Reserves the 2 MB pages for the exchange's shared memory.
-# Turns on Cooler Boost (below). Then checks the rest of the setup in results.md and warns about
-# what differs. The CPU numbers assume the i7-14650HX the benchmark defaults are made for, Cooler
-# Boost the MSI Katana 17 HX.
+# Caps the P-cores' clock and turns on Cooler Boost (both below). Then checks the rest of the setup
+# in results.md and warns about what differs. The CPU numbers assume the i7-14650HX the benchmark
+# defaults are made for, Cooler Boost the MSI Katana 17 HX.
 #
 # Usage:   sudo prepare-machine.sh          pin the uncore clock, no deep idle, no C1E promotion,
-#                                           huge pages, Cooler Boost, check the setup
+#                                           huge pages, cap the P-cores' clock, Cooler Boost,
+#                                           check the setup
 #          sudo prepare-machine.sh --undo   restore the uncore clock's default minimum, allow
 #                                           deep idle and C1E promotion again, release the huge
-#                                           pages, Cooler Boost off
+#                                           pages, remove the clock cap, Cooler Boost off
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
@@ -116,6 +117,26 @@ else
     chmod 700 "$HUGE_DIR"
     echo "huge pages: $reserved of 2 MB reserved, shared memory in $HUGE_DIR"
 fi
+
+# The P-cores' clock capped at FREQ_CAP_MHZ. With C1E promotion off (above), a current limit holds
+# the busy P-cores at 4.0 GHz anyway: MSR_CORE_PERF_LIMIT_REASONS (0x64F) shows "Other"
+# (electrical) during a run, while the turbo table allows 4.8 GHz for up to 8 busy P-cores. That
+# limit is the CPU's own control loop and could move the clock in the middle of a run, and clock
+# changes stalled the busy cores (see C1E above): capped at it, the clock stays where it is. A core
+# spinning alone during the exchange's startup doesn't heat up at its top turbo either (88 C in
+# 1-3 s). The E-cores' maximum (3.7 GHz) is below the cap, they're left as they are.
+# FREQ_CAP_MHZ=0 in the environment leaves the clock as it is.
+FREQ_CAP_MHZ=${FREQ_CAP_MHZ:-4000}
+capped=()
+for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
+    (( FREQ_CAP_MHZ > 0 )) || break
+    max=$(cat "$f/cpuinfo_max_freq")
+    (( max > FREQ_CAP_MHZ * 1000 )) || continue
+    if [[ $undo == yes ]]; then echo "$max" > "$f/scaling_max_freq"; else echo $((FREQ_CAP_MHZ * 1000)) > "$f/scaling_max_freq"; fi
+    c=${f%/cpufreq}
+    capped+=("${c##*cpu}")
+done
+(( ${#capped[@]} )) && echo "clock $([[ $undo == yes ]] && echo "cap removed" || echo "capped at $FREQ_CAP_MHZ MHz") on CPUs ${capped[*]}"
 
 # Cooler Boost, the fans at full speed, through the laptop's embedded controller. Under Linux the
 # fans otherwise stay at ~3500 rpm whatever the temperature (MSI's fan curve is applied by its
