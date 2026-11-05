@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the exchange and the exchange benchmark, starts the exchange with its threads pinned, runs
 # the benchmark's clients against it, stops the exchange with SIGTERM and appends the result to
-# results.csv next to this script.
+# results.csv and the exchange's part of it to results-exchange.csv, both next to this script.
 #
 # Cores (CPUs 2-15 isolated, see ../matching-engine-benchmark/results.md): the exchange's matching
 # engine on 8 and order server on 10 (the 5.2 GHz cores), market data publisher 12, snapshot
@@ -15,13 +15,18 @@
 # and market updates/s, and p50 p90 p99 p99.9 max in us of request -> final response, of
 # request -> ADD / CANCEL update and of the sender's schedule lag, then the thermal throttle events
 # during the measurement (package, physical cores; not zero: not comparable). Latencies leave out
-# the first 10% of requests. After the row, scripts/trace-analysis.py prints the exchange's part of
-# each request, from its request in its ring to its final response in the client's ring (not recorded).
+# the first 10% of requests.
+#
+# results-exchange.csv gets the same run's exchange's part from scripts/trace-analysis.py: from a
+# request in its ring (the benchmark's C1) to its final response in the client's ring (the order
+# server's T6). The same first five columns as results.csv, then the requests measured, those
+# without a T6, and mean p50 p90 p99 p99.9 max in us. No row if the analysis finds no T6.
 #
 # Usage:   run-exchange-benchmark.sh [benchmark options]
 #          run-exchange-benchmark.sh --rate 200000 --clients 64
 # Env:     BENCH_DIR      directory for the logs (default /tmp/exchange-bench)
-#          BENCH_RESULTS  file to record to (default results.csv next to this script)
+#          BENCH_RESULTS  file to record to (default results.csv next to this script), the
+#                         exchange's part goes to the same name with -exchange before .csv
 #          EXCHANGE_ARGS  the exchange's options (default the cores above)
 set -euo pipefail
 
@@ -112,9 +117,20 @@ if [[ ! -f $RESULTS ]]; then
     done
     echo "date,commit,dirty,changes,options,sent_per_s,answered,tcp_gaps,md_lost,requests_per_s,md_updates_per_s$latency,throttle_package,throttle_cores" > "$RESULTS"
 fi
-echo "$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\",$result" >> "$RESULTS"
+run="$(date '+%Y-%m-%d %H:%M'),$commit,$dirty,$changes,\"$*\""
+echo "$run,$result" >> "$RESULTS"
 echo "recorded in $RESULTS"
 
 # The exchange's part of each request, from the order server's T6 lines and the benchmark's
-# benchmark_trace.log, complete once the exchange has stopped. Printed only, not recorded.
-python3 "$REPO/scripts/trace-analysis.py" || true
+# benchmark_trace.log, complete once the exchange has stopped. Printed, its csv line recorded.
+EXCHANGE_RESULTS=${RESULTS%.csv}-exchange.csv
+analysis=$(python3 "$REPO/scripts/trace-analysis.py") || true
+grep -v '^csv:' <<< "$analysis" || true
+exchange=$(sed -n 's/^csv://p' <<< "$analysis")
+if [[ -z $exchange ]]; then
+    echo "no csv line from trace-analysis.py, nothing recorded in $EXCHANGE_RESULTS" >&2
+else
+    [[ -f $EXCHANGE_RESULTS ]] || echo "date,commit,dirty,changes,options,requests,missing,mean,p50,p90,p99,p99.9,max" > "$EXCHANGE_RESULTS"
+    echo "$run,$exchange" >> "$EXCHANGE_RESULTS"
+    echo "recorded in $EXCHANGE_RESULTS"
+fi

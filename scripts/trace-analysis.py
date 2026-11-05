@@ -101,6 +101,10 @@ def main():
     print(f"{'':<10} {'mean':>8} {heads} {'max':>8}")
     cells = " ".join(f"{perf.percentile(v, p):8.2f}" for p in perf.PERCENTILES)
     print(f"{'C1 -> T6':<10} {sum(v) / len(v):8.2f} {cells} {v[-1]:8.2f}")
+    # For run-exchange-benchmark.sh's results-exchange.csv: requests, missing, then mean, the
+    # percentiles and max in us.
+    us_values = [sum(v) / len(v)] + [perf.percentile(v, p) for p in perf.PERCENTILES] + [v[-1]]
+    print("csv:" + ",".join([str(len(v)), str(missing)] + [f"{x:.2f}" for x in us_values]))
 
 
 if __name__ == "__main__":
