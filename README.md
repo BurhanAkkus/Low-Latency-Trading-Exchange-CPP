@@ -30,7 +30,7 @@ flowchart LR
 
 ## Result
 
-Wire to wire, the exchange answers a request in 0.63 µs at p50, 0.95 µs at p99 and 1.08 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 93 ns at p50 and 294 ns at p99.
+Wire to wire, the exchange answers a request in 0.63 µs at p50, 0.95 µs at p99 and 1.08 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 67 ns at p50 and 200 ns at p99.
 
 ### Exchange, wire to wire
 
@@ -50,7 +50,7 @@ Nanoseconds per request, from reading it off the request queue to having written
 
 | p50 | p90 | p99 | Throughput |
 | --- | --- | --- | --- |
-| 93 [91-96] | 174 [173-183] | 294 [292-304] | 127 ns per request, about 7.9M requests/s |
+| 67 [67-68] | 124 [123-124] | 200 [198-203] | 111 ns per request, about 9.0M requests/s |
 
 - **Workload:** 500,000 requests sent back to back, the first 50,000 skipped as warm-up. 8 instruments, 16 clients, prices 1-256, quantities 1-100, 25% cancels, seed 42. Stand-ins for the order server and market data publisher read the output queues, with a 16 µs busy wait per loop for their syscalls.
 
