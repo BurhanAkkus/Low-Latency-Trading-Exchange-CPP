@@ -30,7 +30,7 @@ flowchart LR
 
 ## Result
 
-Wire to wire, the exchange answers a request in 0.72 µs at p50, 1.16 µs at p99 and 1.33 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 93 ns at p50 and 294 ns at p99.
+Wire to wire, the exchange answers a request in 0.63 µs at p50, 0.95 µs at p99 and 1.08 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 93 ns at p50 and 294 ns at p99.
 
 ### Exchange, wire to wire
 
@@ -38,7 +38,7 @@ Microseconds, from a request being in its client's request ring in shared memory
 
 | mean | p50 | p90 | p99 | p99.9 |
 | --- | --- | --- | --- | --- |
-| 0.74 | 0.72 | 0.94 | 1.16 | 1.33 |
+| 0.65 | 0.63 | 0.80 | 0.95 | 1.08 |
 
 - **Workload:** 255 clients, each with its own slot in the order server's shared memory. 1,000,000 requests sent open loop at 100,000 a second for 10 s: request i is due at start + i / rate, whether or not earlier ones were answered. About 25% of requests cancel a random earlier order, the rest are new limit orders. Prices uniform in 1-256, quantities 1-1000, seed 42. The first 10% of requests are not measured.
 - **Completeness:** all 1,000,000 requests answered, no sequence gaps, no lost market updates.
