@@ -1,7 +1,10 @@
 #pragma once
+#include <cstddef>
 #include <cstdlib>
+#include <memory>
 #include <new>
 #include <stack>
+#include <type_traits>
 #include <vector>
 #include "macros.h"
 
@@ -12,6 +15,7 @@ namespace Common{
     template<typename T, std::size_t N>
     class MemoryPool final{
         public:
+            using value_type = T;
             // All memory allocated and touched up front, nothing is allocated afterwards.
             MemoryPool():store_(N, T{}), free_(allIndices()){}
 
@@ -54,6 +58,55 @@ namespace Common{
             std::vector<T> store_;
             std::stack<std::size_t, std::vector<std::size_t>> free_;
     };
+
+    // Raw storage for one object of up to Size bytes: the blocks a PoolAllocator hands out.
+    template<std::size_t Size>
+    struct alignas(std::max_align_t) PoolBlock{
+        std::byte bytes[Size];
+    };
+
+    // Allocator for a node-based container (std::unordered_map, std::list, ...) that takes every
+    // node from a MemoryPool of PoolBlocks. The pool's memory is allocated and touched up front, so
+    // an insert never calls malloc and never touches a fresh page (a page fault, ~1 us).
+    // The container rebinds the allocator to each type it allocates: its nodes, one at a time, and
+    // for an unordered_map its bucket array, an array of pointers allocated once by reserve(),
+    // which goes to std::allocator. Every rebound copy points at the same pool.
+    template<typename T, typename Pool>
+    class PoolAllocator{
+        public:
+            using value_type = T;
+
+            explicit PoolAllocator(Pool* pool) noexcept : pool_(pool) {}
+            template<typename U>
+            PoolAllocator(const PoolAllocator<U, Pool>& other) noexcept : pool_(other.pool()) {}
+
+            T* allocate(std::size_t n) noexcept {
+                if constexpr (std::is_pointer_v<T>) {
+                    return std::allocator<T>{}.allocate(n);
+                } else {
+                    using Block = typename Pool::value_type;
+                    static_assert(sizeof(T) <= sizeof(Block) && alignof(T) <= alignof(Block),
+                                  "The container's node doesn't fit in the pool's blocks.");
+                    ASSERT(n == 1, "PoolAllocator hands out one node at a time!");
+                    return reinterpret_cast<T*>(pool_->allocate());
+                }
+            }
+            void deallocate(T* p, [[maybe_unused]] std::size_t n) noexcept {
+                if constexpr (std::is_pointer_v<T>) {
+                    std::allocator<T>{}.deallocate(p, n);
+                } else {
+                    pool_->deallocate(reinterpret_cast<typename Pool::value_type*>(p));
+                }
+            }
+            auto pool() const noexcept { return pool_; }
+        private:
+            Pool* pool_;
+    };
+    // Equal when they share a pool: one can free what the other allocated.
+    template<typename T, typename U, typename Pool>
+    bool operator==(const PoolAllocator<T, Pool>& a, const PoolAllocator<U, Pool>& b) noexcept {
+        return a.pool() == b.pool();
+    }
 
 }
 
