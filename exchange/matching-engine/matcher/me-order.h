@@ -1,6 +1,7 @@
 #pragma once
 #include "common/types.h"
 #include "common/constants.h"
+#include "common/memory-pool.h"
 #include <sstream>
 #include <map>
 #include <array>
@@ -16,8 +17,13 @@ namespace Exchange{
       return key.second * ME_MAX_NUM_CLIENTS + key.first;
     }
   };
-  // Resting orders by (client id, client order id).
-  using RestingOrderMap = std::unordered_map<std::pair<ClientId,OrderId>, MEOrder*, RestingOrderHash>;
+  // The map's nodes, one per resting order: libstdc++'s node is the next pointer and the
+  // (key, MEOrder*) pair, 32 bytes. PoolAllocator fails to compile if it ever stops fitting.
+  using RestingOrderPool = MemoryPool<PoolBlock<32>, ME_MAX_RESTING_ORDERS>;
+  // Resting orders by (client id, client order id), nodes from a RestingOrderPool.
+  using RestingOrderMap = std::unordered_map<std::pair<ClientId,OrderId>, MEOrder*, RestingOrderHash,
+      std::equal_to<std::pair<ClientId,OrderId>>,
+      PoolAllocator<std::pair<const std::pair<ClientId,OrderId>, MEOrder*>, RestingOrderPool>>;
 // ToDo 
 // align objects to 64 bytes.
     struct MEOrder {

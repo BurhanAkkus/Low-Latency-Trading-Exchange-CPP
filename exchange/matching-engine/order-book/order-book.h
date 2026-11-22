@@ -50,7 +50,9 @@ namespace Exchange{
         using LevelBits = std::array<uint64_t, (ME_MAX_PRICE_LEVELS + 1) / 64 + 1>;
         LevelBits ask_levels_{};
         LevelBits bid_levels_{};
-        RestingOrderMap restingOrders{};
+        // Declared before the map: built before it, destroyed after it.
+        RestingOrderPool resting_order_pool_;
+        RestingOrderMap restingOrders = RestingOrderMap(RestingOrderMap::allocator_type(&resting_order_pool_));
         MemoryPool<MEOrder, ME_MAX_RESTING_ORDERS> order_memory_pool_;
         TickerId ticker_id_;
         OrderId next_market_order_id_ = 0;
