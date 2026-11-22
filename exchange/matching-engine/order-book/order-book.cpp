@@ -7,6 +7,9 @@ namespace Exchange{
         : matching_engine_{matching_engine},
         ticker_id_(ticker_id),
         logger_(logger) {
+            // Room for every order the pool can hold, so the map never rehashes: a rehash
+            // invalidates every iterator, and each resting order keeps one.
+            restingOrders.reserve(ME_MAX_RESTING_ORDERS);
             ask_sentinel_order_.price_ = ME_MAX_PRICE_LEVELS + 1;
             ask_sentinel_order_.next_order_ = ask_sentinel_order_.prev_order_ = &ask_sentinel_order_;
             sell_orders[ME_MAX_PRICE_LEVELS + 1].first_order_ = &ask_sentinel_order_;
@@ -25,7 +28,8 @@ namespace Exchange{
         // Massive array lookup! Super sparse. employ a better suited sparse container.
 
         // send accepted ClientResponse
-        if(client_orders_[client_id][client_order_id] != nullptr){
+        auto it = restingOrders.find({client_id,client_order_id});
+        if(it != restingOrders.end()){
             client_response_ = {ClientResponseType::REJECTED,
                 client_id, ticker_id_, client_order_id,
                 OrderId_INVALID, side, price, 0, 0};
@@ -72,7 +76,7 @@ namespace Exchange{
             // update heads
             compareAndAssignMin(head_of_ask_,price);
             // update client Orders;
-            client_orders_[client_id][client_order_id] = order;
+            order->resting_position_ = restingOrders.try_emplace({client_id, client_order_id}, order).first;
             // END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
             // send market update.
             market_update_ = {MarketUpdateType::ADD,
@@ -109,7 +113,7 @@ namespace Exchange{
             //update head
             if (price > head_of_bid_) head_of_bid_ = price;
             // update client Orders;
-            client_orders_[client_id][client_order_id] = order;
+            order->resting_position_ = restingOrders.try_emplace({client_id, client_order_id}, order).first;
             // END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
             // send market update.
             market_update_ = {MarketUpdateType::ADD,
@@ -153,7 +157,7 @@ namespace Exchange{
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
                 // START_MEASURE(Exchange_MEOrderBook_removeOrder);
-                client_orders_[best_offer->client_id_][best_offer->client_order_id_] = nullptr;
+                restingOrders.erase(best_offer->resting_position_);
                 // Level completely consumed.
                 if(UNLIKELY(best_offer == tail)){
                     sell_orders[best_offer->price_].first_order_ = nullptr;
@@ -217,7 +221,7 @@ namespace Exchange{
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
                 // START_MEASURE(Exchange_MEOrderBook_removeOrder);
-                client_orders_[best_offer->client_id_][best_offer->client_order_id_] = nullptr;
+                restingOrders.erase(best_offer->resting_position_);
                 // Level completely consumed.
                 if(UNLIKELY(best_offer == tail)){
                     buy_orders[best_offer->price_].first_order_ = nullptr;
@@ -251,14 +255,15 @@ namespace Exchange{
 
 
     void MEOrderBook::cancel(ClientId client_id, OrderId client_order_id) noexcept{
-        auto order = client_orders_[client_id][client_order_id];
-        if(UNLIKELY(order == nullptr)){
+        const auto it = restingOrders.find({client_id, client_order_id});
+        if(UNLIKELY(it == restingOrders.end())){
             client_response_ = {ClientResponseType::CANCEL_REJECTED,
                 client_id, ticker_id_,client_order_id,
                 OrderId_INVALID , Side::INVALID, Price_INVALID, Qty_INVALID, Qty_INVALID};
             matching_engine_->sendClientResponse(&client_response_);
             return;
         }
+        auto order = it->second;
         client_response_ = {ClientResponseType::CANCELED,
             order->client_id_, ticker_id_, order->client_order_id_,
             order ->market_order_id_ , order->side_, order->price_, 0, 0};
@@ -280,7 +285,7 @@ namespace Exchange{
     // Removes a cancelled order from its level, keeps the level bits and the head up to date.
     void MEOrderBook::eraseSellOrder(MEOrder* order) noexcept {
         // remove from client orders.
-        client_orders_[order->client_id_][order->client_order_id_] = nullptr;
+        restingOrders.erase(order->resting_position_);
         auto& level = sell_orders[order->price_];
         // only order left at price
         if(order->next_order_ == order){
@@ -300,7 +305,7 @@ namespace Exchange{
     }
     void MEOrderBook::eraseBuyOrder(MEOrder* order) noexcept {
         // remove from client orders.
-        client_orders_[order->client_id_][order->client_order_id_] = nullptr;
+        restingOrders.erase(order->resting_position_);
         auto& level = buy_orders[order->price_];
         // only order left at price
         if(order->next_order_ == order){
