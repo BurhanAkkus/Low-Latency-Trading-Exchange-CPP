@@ -1,30 +1,14 @@
 #pragma once
 #include "common/types.h"
 #include "common/constants.h"
-#include "common/memory-pool.h"
+#include <cstdint>
 #include <sstream>
 #include <map>
 #include <array>
-#include <unordered_map>
 using namespace Common;
 
 namespace Exchange{
-  struct MEOrder;
-  // A different value for every key while client_id < ME_MAX_NUM_CLIENTS. A larger client id only
-  // collides more, the map still compares the whole key.
-  struct RestingOrderHash {
-    auto operator()(const std::pair<ClientId,OrderId>& key) const noexcept -> size_t {
-      return key.second * ME_MAX_NUM_CLIENTS + key.first;
-    }
-  };
-  // The map's nodes, one per resting order: libstdc++'s node is the next pointer and the
-  // (key, MEOrder*) pair, 32 bytes. PoolAllocator fails to compile if it ever stops fitting.
-  using RestingOrderPool = MemoryPool<PoolBlock<32>, ME_MAX_RESTING_ORDERS>;
-  // Resting orders by (client id, client order id), nodes from a RestingOrderPool.
-  using RestingOrderMap = std::unordered_map<std::pair<ClientId,OrderId>, MEOrder*, RestingOrderHash,
-      std::equal_to<std::pair<ClientId,OrderId>>,
-      PoolAllocator<std::pair<const std::pair<ClientId,OrderId>, MEOrder*>, RestingOrderPool>>;
-// ToDo 
+// ToDo
 // align objects to 64 bytes.
     struct MEOrder {
     TickerId ticker_id_ = TickerId_INVALID;
@@ -36,8 +20,8 @@ namespace Exchange{
     Qty qty_ = Qty_INVALID;
     MEOrder* next_order_ = nullptr;
     MEOrder* prev_order_ = nullptr;
-    // Where this order sits in the book's resting order map, set when the order starts resting.
-    RestingOrderMap::iterator resting_position_{};
+    // Where this order sits in the book's RestingOrderTable, bucket << 4 | slot, set by its insert().
+    uint16_t resting_slot_ = 0;
     MEOrder() = default;
     MEOrder(TickerId ticker_id, ClientId client_id, OrderId
       client_order_id, OrderId market_order_id, Side side,
