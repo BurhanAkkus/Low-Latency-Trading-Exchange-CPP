@@ -21,9 +21,6 @@ namespace Exchange{
         matching_engine_ = nullptr;
     }
     void MEOrderBook::add(ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept{
-        // ToDo - improve
-        // Massive array lookup! Super sparse. employ a better suited sparse container.
-
         // send accepted ClientResponse
         if(resting_orders_.find(client_id, client_order_id) != nullptr){
             client_response_ = {ClientResponseType::REJECTED,
