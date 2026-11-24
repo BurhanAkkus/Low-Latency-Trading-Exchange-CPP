@@ -27,9 +27,9 @@ namespace Exchange{
         ~MEOrderBook();
         void add (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
         void cancel (ClientId client_id, OrderId client_order_id) noexcept;
-        // The two halves of the resting orders' warm-up, see MatchingEngine::run().
-        inline auto fillRestingOrders() noexcept -> void{ resting_orders_.fill(); }
-        inline auto clearRestingOrders() noexcept -> void{ resting_orders_.clear(); }
+        // Nothing left to warm up, they go with the warm-up in MatchingEngine::run().
+        inline auto fillRestingOrders() noexcept -> void{}
+        inline auto clearRestingOrders() noexcept -> void{}
         private:
         MatchingEngine* matching_engine_;
         //ToDo - Improvement - Benchmark
@@ -54,7 +54,7 @@ namespace Exchange{
         using LevelBits = std::array<uint64_t, (ME_MAX_PRICE_LEVELS + 1) / 64 + 1>;
         LevelBits ask_levels_{};
         LevelBits bid_levels_{};
-        RestingOrders resting_orders_;
+        RestingOrders resting_orders_{order_memory_pool_};
         MemoryPool<MEOrder, ME_MAX_RESTING_ORDERS> order_memory_pool_;
         TickerId ticker_id_;
         OrderId next_market_order_id_ = 0;
