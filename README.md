@@ -30,7 +30,7 @@ flowchart LR
 
 ## Result
 
-Wire to wire, the exchange answers a request in 0.63 µs at p50, 0.94 µs at p99 and 1.09 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 67 ns at p50 and 259 ns at p99.
+Wire to wire, the exchange answers a request in 0.62 µs at p50, 0.93 µs at p99 and 1.07 µs at p99.9, at 100,000 requests/s from 255 clients. Inside the matching engine alone, a request takes 61 ns at p50 and 194 ns at p99.
 
 ### Exchange, wire to wire
 
@@ -38,7 +38,7 @@ Microseconds, from a request being in its client's request ring in shared memory
 
 | mean | p50 | p90 | p99 | p99.9 |
 | --- | --- | --- | --- | --- |
-| 0.65 | 0.63 | 0.79 | 0.94 | 1.09 |
+| 0.64 | 0.62 | 0.78 | 0.93 | 1.07 |
 
 - **Workload:** 255 clients, each with its own slot in the order server's shared memory. 1,000,000 requests sent open loop at 100,000 a second for 10 s: request i is due at start + i / rate, whether or not earlier ones were answered. About 25% of requests cancel a random earlier order, the rest are new limit orders. Prices uniform in 1-256, quantities 1-1000, seed 42. The first 10% of requests are not measured.
 - **Completeness:** all 1,000,000 requests answered, no sequence gaps, no lost market updates.
@@ -46,11 +46,11 @@ Microseconds, from a request being in its client's request ring in shared memory
 
 ### Matching engine alone
 
-Nanoseconds per request, from reading it off the request queue to having written and published every response and market update for it. Median of 5 runs, range in brackets:
+Nanoseconds per request, from reading it off the request queue to having written and published every response and market update for it:
 
 | p50 | p90 | p99 | Throughput |
 | --- | --- | --- | --- |
-| 67 [65-67] | 147 [147-147] | 259 [259-260] | 120 ns per request, about 8.3M requests/s |
+| 61 | 118 | 194 | 105 ns per request, about 9.5M requests/s |
 
 - **Workload:** 500,000 requests sent back to back, the first 50,000 skipped as warm-up. 8 instruments, 16 clients, prices 1-256, quantities 1-100, 25% cancels, seed 42. Stand-ins for the order server and market data publisher read the output queues, with a 16 µs busy wait per loop for their syscalls.
 
