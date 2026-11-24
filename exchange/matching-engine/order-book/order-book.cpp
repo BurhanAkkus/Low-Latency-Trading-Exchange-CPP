@@ -25,7 +25,7 @@ namespace Exchange{
         // Massive array lookup! Super sparse. employ a better suited sparse container.
 
         // send accepted ClientResponse
-        if(restingOrders.find(client_id, client_order_id) != nullptr){
+        if(client_orders_[client_id][client_order_id] != nullptr){
             client_response_ = {ClientResponseType::REJECTED,
                 client_id, ticker_id_, client_order_id,
                 OrderId_INVALID, side, price, 0, 0};
@@ -72,7 +72,7 @@ namespace Exchange{
             // update heads
             compareAndAssignMin(head_of_ask_,price);
             // update client Orders;
-            restingOrders.insert(order);
+            client_orders_[client_id][client_order_id] = order;
             // END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
             // send market update.
             market_update_ = {MarketUpdateType::ADD,
@@ -109,7 +109,7 @@ namespace Exchange{
             //update head
             if (price > head_of_bid_) head_of_bid_ = price;
             // update client Orders;
-            restingOrders.insert(order);
+            client_orders_[client_id][client_order_id] = order;
             // END_MEASURE(Exchange_MEOrderBook_addOrder, (*logger_));
             // send market update.
             market_update_ = {MarketUpdateType::ADD,
@@ -153,7 +153,7 @@ namespace Exchange{
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
                 // START_MEASURE(Exchange_MEOrderBook_removeOrder);
-                restingOrders.erase(best_offer);
+                client_orders_[best_offer->client_id_][best_offer->client_order_id_] = nullptr;
                 // Level completely consumed.
                 if(UNLIKELY(best_offer == tail)){
                     sell_orders[best_offer->price_].first_order_ = nullptr;
@@ -217,7 +217,7 @@ namespace Exchange{
                     best_offer->price_, 0};
                 matching_engine_->sendMarketUpdate(&market_update_);
                 // START_MEASURE(Exchange_MEOrderBook_removeOrder);
-                restingOrders.erase(best_offer);
+                client_orders_[best_offer->client_id_][best_offer->client_order_id_] = nullptr;
                 // Level completely consumed.
                 if(UNLIKELY(best_offer == tail)){
                     buy_orders[best_offer->price_].first_order_ = nullptr;
@@ -251,7 +251,7 @@ namespace Exchange{
 
 
     void MEOrderBook::cancel(ClientId client_id, OrderId client_order_id) noexcept{
-        auto order = restingOrders.find(client_id, client_order_id);
+        auto order = client_orders_[client_id][client_order_id];
         if(UNLIKELY(order == nullptr)){
             client_response_ = {ClientResponseType::CANCEL_REJECTED,
                 client_id, ticker_id_,client_order_id,
@@ -280,7 +280,7 @@ namespace Exchange{
     // Removes a cancelled order from its level, keeps the level bits and the head up to date.
     void MEOrderBook::eraseSellOrder(MEOrder* order) noexcept {
         // remove from client orders.
-        restingOrders.erase(order);
+        client_orders_[order->client_id_][order->client_order_id_] = nullptr;
         auto& level = sell_orders[order->price_];
         // only order left at price
         if(order->next_order_ == order){
@@ -300,7 +300,7 @@ namespace Exchange{
     }
     void MEOrderBook::eraseBuyOrder(MEOrder* order) noexcept {
         // remove from client orders.
-        restingOrders.erase(order);
+        client_orders_[order->client_id_][order->client_order_id_] = nullptr;
         auto& level = buy_orders[order->price_];
         // only order left at price
         if(order->next_order_ == order){
