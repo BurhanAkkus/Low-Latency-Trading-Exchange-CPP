@@ -3,7 +3,6 @@
 #include "common/constants.h"
 #include <sstream>
 #include <map>
-#include <array>
 using namespace Common;
 
 namespace Exchange{
@@ -41,6 +40,5 @@ namespace Exchange{
   };
   //ToDo
   // implement allocators utilizing memoryPool.
-  using OrderHashMap = std::array<MEOrder*,ME_MAX_ORDER_PER_CLIENT>;
   using OrdersAtPriceMap = std::map<Price,MEOrdersAtPrice*>;
 }
