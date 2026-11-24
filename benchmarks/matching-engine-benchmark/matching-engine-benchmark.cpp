@@ -16,6 +16,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include "common/utils.h"
 #include "exchange/matching-engine/matcher/matching-engine.h"
 
 using namespace Exchange;
@@ -107,6 +108,7 @@ namespace {
 }
 
 int main(int argc, char** argv) {
+  Common::keepFreedMemory();
   const auto cfg = parseArgs(argc, argv);
   std::cout << "requests:" << cfg.requests << " interval_us:" << cfg.interval_ns / NANOS_TO_MICROS
             << " consumer_loop_ns:" << cfg.consumer_loop_ns
