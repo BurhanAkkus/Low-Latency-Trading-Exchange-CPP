@@ -27,6 +27,9 @@ namespace Exchange{
         ~MEOrderBook();
         void add (ClientId client_id, OrderId client_order_id, Side side, Price price, Qty qty) noexcept;
         void cancel (ClientId client_id, OrderId client_order_id) noexcept;
+        // The two halves of the resting orders' warm-up, see MatchingEngine::run().
+        inline auto fillRestingOrders() noexcept -> void{ resting_orders_.fill(); }
+        inline auto clearRestingOrders() noexcept -> void{ resting_orders_.clear(); }
         private:
         MatchingEngine* matching_engine_;
         //ToDo - Improvement - Benchmark

@@ -1,4 +1,5 @@
 #include <csignal>
+#include "common/utils.h"
 #include "matcher/matching-engine.h"
 
 Common::Logger* logger = nullptr;
@@ -11,6 +12,7 @@ void signal_handler(int) {
 }
 
 int main(int, char **) {
+    Common::keepFreedMemory();
     logger = new Common::Logger("exchange_main.log");
     std::signal(SIGINT, signal_handler);
     const int sleep_time = 100 * 1000;
