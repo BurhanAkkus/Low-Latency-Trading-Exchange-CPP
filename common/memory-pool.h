@@ -43,6 +43,9 @@ namespace Common{
                 ASSERT(free_.size() < N, "Deallocated more elements than were allocated!");
                 free_.push(static_cast<std::size_t>(element_index));
             }
+            // An element's index in the pool, and the element at an index.
+            auto indexOf(const T* element) const noexcept -> std::size_t{ return static_cast<std::size_t>(element - store_.data()); }
+            auto at(std::size_t index) noexcept -> T*{ return &store_[index]; }
         private:
             // Every slot free. Reversed so the first allocations hand out slots 0, 1, 2, ...
             static auto allIndices(){
