@@ -1,6 +1,7 @@
 #include <csignal>
 #include <cstring>
 #include <iostream>
+#include "common/utils.h"
 #include "exchange/matching-engine/matcher/matching-engine.h"
 #include "exchange/market-data/market-data-publisher.h"
 #include "exchange/order-server/order-server.h"
@@ -50,6 +51,7 @@ namespace {
 }
 
 int main(int argc, char **argv) {
+    Common::keepFreedMemory();
     // First, a signal before this stops the process with nothing to clean up yet. SIGTERM too: a
     // script's background commands ignore SIGINT until a handler is set, run-exchange-benchmark.sh
     // stops the exchange with SIGTERM.

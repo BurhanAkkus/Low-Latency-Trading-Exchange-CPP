@@ -39,6 +39,13 @@ namespace Exchange{
     void MatchingEngine::run() noexcept {
             logger_.log("%:% %() %\n", __FILE__, __LINE__,
                 __FUNCTION__, Common::getCurrentTimeStr(&time_str_));
+            // Warm-up: fill every book's resting orders to the limit, then empty them. malloc keeps
+            // the freed memory (Common::keepFreedMemory() in main()), so inserting an order reuses
+            // memory that is already touched instead of taking a page fault. On this thread because
+            // malloc keeps each thread's memory apart. All books are filled before the first is
+            // emptied, otherwise each book would just reuse the memory of the one before.
+            for(auto order_book : ticker_order_book_) order_book->fillRestingOrders();
+            for(auto order_book : ticker_order_book_) order_book->clearRestingOrders();
             while (true) {
                 // Read run_ before the queue: once it reads false, an empty queue means every
                 // request queued before stop() has been processed.
