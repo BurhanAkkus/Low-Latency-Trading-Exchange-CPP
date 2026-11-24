@@ -4,9 +4,19 @@
 #include <sstream>
 #include <map>
 #include <array>
+#include <unordered_map>
 using namespace Common;
 
 namespace Exchange{
+  struct MEOrder;
+  // A book's resting orders by client id and client order id, see RestingOrders. Declared here
+  // because every order keeps its iterator.
+  struct RestingOrderHash{
+    auto operator()(const std::pair<ClientId,OrderId>& key) const noexcept -> std::size_t{
+      return key.second * ME_MAX_NUM_CLIENTS + key.first;
+    }
+  };
+  using RestingOrderMap = std::unordered_map<std::pair<ClientId,OrderId>, MEOrder*, RestingOrderHash>;
 // ToDo 
 // align objects to 64 bytes.
     struct MEOrder {
@@ -19,6 +29,8 @@ namespace Exchange{
     Qty qty_ = Qty_INVALID;
     MEOrder* next_order_ = nullptr;
     MEOrder* prev_order_ = nullptr;
+    // Where this order is in its book's resting orders, set when it starts resting.
+    RestingOrderMap::iterator resting_position_{};
     MEOrder() = default;
     MEOrder(TickerId ticker_id, ClientId client_id, OrderId
       client_order_id, OrderId market_order_id, Side side,
