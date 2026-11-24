@@ -1,14 +1,13 @@
 #pragma once
 #include "common/types.h"
 #include "common/constants.h"
-#include <cstdint>
 #include <sstream>
 #include <map>
 #include <array>
 using namespace Common;
 
 namespace Exchange{
-// ToDo
+// ToDo 
 // align objects to 64 bytes.
     struct MEOrder {
     TickerId ticker_id_ = TickerId_INVALID;
@@ -20,8 +19,6 @@ namespace Exchange{
     Qty qty_ = Qty_INVALID;
     MEOrder* next_order_ = nullptr;
     MEOrder* prev_order_ = nullptr;
-    // Where this order sits in the book's RestingOrderTable, bucket << 4 | slot, set by its insert().
-    uint16_t resting_slot_ = 0;
     MEOrder() = default;
     MEOrder(TickerId ticker_id, ClientId client_id, OrderId
       client_order_id, OrderId market_order_id, Side side,
